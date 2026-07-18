@@ -6,6 +6,13 @@ from rich.console import Console
 from rich.table import Table
 
 from ai_video_factory.infrastructure.diagnostics import CheckResult
+from ai_video_factory.shared.health import HealthStatus
+
+_STATUS_STYLES: dict[HealthStatus, str] = {
+    HealthStatus.OK: "[green]OK[/green]",
+    HealthStatus.WARN: "[yellow]WARN[/yellow]",
+    HealthStatus.FAIL: "[red]FAIL[/red]",
+}
 
 
 def render_diagnostics(results: list[CheckResult], *, console: Console | None = None) -> None:
@@ -21,6 +28,5 @@ def render_diagnostics(results: list[CheckResult], *, console: Console | None = 
     table.add_column("Status")
     table.add_column("Detail", overflow="fold")
     for result in results:
-        status = "[green]OK[/green]" if result.ok else "[red]FAIL[/red]"
-        table.add_row(result.name, status, result.detail)
+        table.add_row(result.name, _STATUS_STYLES[result.status], result.detail)
     out.print(table)

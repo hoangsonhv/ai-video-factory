@@ -20,51 +20,62 @@
 
 **Session date:** 2026-07-18
 **Author:** Senior Python Engineer
-**Sprint:** 001 — Project Foundation (delivered)
+**Sprint:** 002 — AI Provider Layer (delivered)
 **Version:** 0.1.0-dev
-**Branch:** `feat/sprint001-foundation`
+**Branch:** `feat/sprint002-provider-layer`
 
 ### What was accomplished this session
-- Implemented **Sprint 001 — Project Foundation** into a `src/` layout with Clean Architecture layers (ADR-011).
-- Config (`pydantic-settings` + `.env`, fail-fast `ConfigurationError`), Rich + rotating-file logging, `AppError` exception hierarchy, Typer CLI (`version`, `doctor`), diagnostics (Python/FFmpeg/output/config/SQLite), Rich presenter.
-- 30 pytest tests; Ruff (lint + format), MyPy strict, Pytest all green.
-- Verified the `factory` console script and `python -m ai_video_factory` run.
-- Recorded **ADR-011** (src layout + foundation tooling: Typer, pydantic-settings, Rich, Ruff-only formatter).
+- Built the AI (LLM) provider layer — the single, vendor-neutral way the system talks to LLM providers (ADR-012):
+  - `infrastructure/providers/base/`: `LLMProvider` Protocol; `LLMRequest`/`LLMResponse`/`TokenUsage`/`RawCompletion`/`ProviderHealth`; `AIProviderError` hierarchy; `RetryPolicy`.
+  - `infrastructure/providers/gemini/`: `GeminiProvider` + `GeminiClient` seam over `google-genai` (SDK isolated + lazily imported).
+  - `infrastructure/providers/factory/`: `ProviderFactory.create()` (config-driven).
+  - `ProviderSettings` (provider/api_key/model/timeout/retry_count); `shared/health.HealthStatus`; `doctor` AI-provider check (OK/WARN/FAIL).
+- Verified: Ruff, MyPy (strict), Pytest (65, +35) all green; `ai-video-factory version`/`doctor` run. mypy caught a real bug (SDK `list()` is an async pager) — fixed.
 
 ### Current in-flight work
-- None. Foundation is complete and verified.
+- None. Provider layer complete and verified.
 
 ### Next Action (do this first)
-> Wait for the next Sprint specification from the Lead. Per the roadmap the natural next increment is the **Domain Core** (entities, value objects, enums, domain-specific `DomainError` subclasses). Do NOT implement it until it is specified.
+> Wait for the next Sprint specification from the Lead. Do NOT implement Story/Scene/Planner/Writer/Workflow/Video/Voice/Subtitle/Prompt-engine — all future sprints. A new LLM vendor is added by registering a builder in `ProviderFactory` + an adapter package, only when specified.
 
 ### Context needed to continue
-- **Layout:** package is `src/ai_video_factory/` with layers `domain / application / infrastructure / interface / shared`; cross-cutting `errors.py` at the package root. `domain` and `application` are package markers only so far.
-- **Config:** env vars use prefix `AIVF_` with `__` nesting (e.g. `AIVF_LOGGING__LEVEL`); `.env` supported; `load_settings()` translates validation failures to `ConfigurationError`.
-- **Tooling:** `uv` used locally; `uv pip install -e ".[dev]"`; gates: `ruff check .`, `ruff format --check .`, `mypy src`, `pytest`.
-- **Formatter:** Ruff only (no Black) — confirmed decision this session.
+- **Provider layer:** the app talks to LLMs ONLY through `LLMProvider` (obtained from `ProviderFactory.create()`); it never names a vendor. Provider errors extend `AppError`. Retry is centralized (429/503/timeout); timeout via `asyncio.wait_for`.
+- **Testing a provider:** inject a fake client satisfying the `GeminiClient` protocol; drive async with `asyncio.run` (no `pytest-asyncio`, no real API calls).
+- **Config:** env `AIVF_PROVIDER__{PROVIDER,API_KEY,MODEL,TIMEOUT,RETRY_COUNT}`; `api_key` is `SecretStr`, blank → `None`.
+- **Tooling:** `uv`; `make lint/format/typecheck/test/doctor/run`. Console script is `ai-video-factory`.
 
 ### Decisions made this session
-- **Layout:** Hybrid `src/` + Clean Architecture layers (keep approved package name and layers). Recorded as ADR-011.
-- **Formatter:** Ruff for lint and format; Black not adopted (consistent with conventions §13).
+- ADR-012 recorded: LLM abstraction lives in **infrastructure** (not domain), realizes ADR-005; vendor SDK isolated behind a typed client seam; resilience centralized; factory config-driven.
+- google-genai ships types, so it is type-checked (only `ignore_missing_imports` fallback kept); no `Any` leaks outward.
 
 ### Open questions / risks for next session
-- Sprint-numbering divergence: Lead's "Sprint 001 = Project Foundation" vs roadmap's "Sprint 001 = Domain Core". Roadmap re-alignment is the Lead's call.
-- import-linter not yet wired as an automated gate (layers upheld by construction/review). Consider adding in a tooling pass.
+- `RealGeminiClient` live calls are not unit-tested by design (tests use a fake). Validate manually with a real key via `doctor` / `count_tokens`.
+- `google-genai` SDK surface (async pager, `usage_metadata` fields) was implemented to documented behavior; confirm against a live call when a key is available.
+- import-linter still not wired as an automated gate.
 
 ### Files touched this session
-- Source: all of `src/ai_video_factory/**`, root `main.py`.
-- Tooling/root: `pyproject.toml`, `.gitignore`, `.env.example`, `README.md`.
-- Tests: `tests/**`.
-- Docs: `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`, `04_DECISIONS.md` (ADR-011), `08_ENVIRONMENT.md` (layout note).
+- New source: `infrastructure/providers/**` (base/gemini/factory), `shared/health.py`.
+- Modified source: `infrastructure/config/settings.py` (+`ProviderSettings`), `infrastructure/diagnostics.py` (tri-state + provider check), `interface/presenters/diagnostics_presenter.py`, `interface/cli/app.py`.
+- Config/tooling: `pyproject.toml` (+`google-genai`, mypy `google.*` override), `.env.example`, `uv.lock`.
+- Tests: `test_provider_models/errors/retry/gemini/factory.py` (new); `test_settings.py`, `test_diagnostics.py` (updated).
+- Docs: `04_DECISIONS.md` (ADR-012), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
 
 ### Do NOT do
 - Do not add a Web UI, FastAPI, or Docker (ADR-001, ADR-004; non-goals).
 - Do not put I/O or vendor code in `domain/`.
-- Do not implement any pipeline stage, provider, or workflow — those are future sprints.
+- Do not implement any pipeline stage, prompt engine, or workflow — those are future sprints.
 
 ---
 
 ## Handoff History (rolling, newest first)
+
+### 2026-07-18 — Sprint 002 AI Provider Layer delivered
+- Built LLM provider abstraction (Protocol, models, error hierarchy, retry, timeout), `GeminiProvider` over `google-genai` (isolated behind a client seam), `ProviderFactory`, provider config, and a `doctor` AI-provider health check. 65 tests green; ADR-012 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-18 — Sprint 001.5 Foundation Review Fix delivered
+- Applied Lead review items: `.gitignore`, `.gitkeep` placeholders, artifact cleanup, `CLAUDE.md`, `.editorconfig`, `Makefile`, pre-commit; verified gates green and app runs.
+- No `src/`, test, or architecture changes. Handed off to: next Sprint spec (Domain Core expected; not started).
 
 ### 2026-07-18 — Sprint 001 Project Foundation delivered
 - Implemented foundation (config, logging, exceptions, CLI, diagnostics) in `src/` layout; 30 tests; all gates green.

@@ -1,24 +1,42 @@
-# Python
+# Byte-compiled / optimized / cache
 __pycache__/
 *.py[cod]
-*.egg-info/
-.eggs/
-build/
-dist/
+*.pyo
+*.pyd
+
+# Test & type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Virtual environments
 .venv/
 venv/
 
-# Tooling caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+# Coverage
+.coverage
+htmlcov/
 
-# Runtime artifacts
-data/
-logs/
-output/
+# Logs
+logs/*.log
+logs/**/*.log
 
-# Local configuration / secrets
+# Rendered output (keep the folder)
+output/*
+!output/.gitkeep
+
+# Databases (keep the folder)
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+!data/.gitkeep
+
+# Local secrets / environment
 .env
+
+# Editors / IDEs
+.idea/
+.vscode/
+
+# OS
+.DS_Store

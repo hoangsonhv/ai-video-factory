@@ -21,13 +21,31 @@
 
 ## 2. Current Sprint
 
-**Sprint 001 — Project Foundation — DELIVERED** (per Lead spec; see also `03_ROADMAP.md`)
+**Sprint 002 — AI Provider Layer — DELIVERED** (LLM abstraction; see also `03_ROADMAP.md`)
 
 ## 3. Completed
 
 - Architecture Document (canonical) — **done**.
 - Full documentation set in `docs/` (`00`–`13`, `CHANGELOG`) — **done**.
-- ADR-001 … ADR-011 recorded — **done**.
+- ADR-001 … ADR-012 recorded — **done**.
+- **Sprint 002 — AI Provider Layer — done:**
+  - LLM provider contract in `infrastructure/providers/base/`: `LLMProvider` Protocol (`generate`, `health_check`, `count_tokens`, `models`); models `LLMRequest`, `LLMResponse`, `TokenUsage`, `RawCompletion`, `ProviderHealth`.
+  - Provider error hierarchy (`AIProviderError` → `AuthenticationError`, `RateLimitError`, `TimeoutError`, `ProviderUnavailableError`, `InvalidResponseError`) extending the `AppError`/`ProviderError` tree.
+  - `RetryPolicy` (exponential backoff, retries only 429/503/timeout); configurable per-request timeout via `asyncio.wait_for`.
+  - `GeminiProvider` (first provider) over the official `google-genai` SDK, isolated behind a `GeminiClient` seam (SDK lazily imported); API key read from settings.
+  - `ProviderFactory.create()` — config-driven provider selection (unknown provider → `ConfigurationError`).
+  - Configuration: `ProviderSettings` (`provider`, `api_key` as `SecretStr`, `model`, `timeout`, `retry_count`).
+  - `doctor` gains an AI-provider health check returning OK/WARN/FAIL (WARN when no key); diagnostics now tri-state via `shared/health.HealthStatus`.
+  - Tests: 65 total (35 new — models, errors, retry, Gemini with a fake client, factory, settings, diagnostics); no real API calls.
+  - Ruff, MyPy (strict), Pytest all green.
+- **Sprint 001.5 — Foundation Review Fix — done:**
+  - `.gitignore` expanded (caches, venvs, coverage, logs, `output/*`/`data/*` with `.gitkeep` negations, `.env`, IDE/OS files).
+  - `.gitkeep` placeholders in `logs/`, `output/`, `data/`; runtime artifacts removed from the working tree (folders preserved).
+  - `CLAUDE.md` rewritten: project role, architecture rules, sprint rules, coding rules, review rules, hard "do not" list.
+  - `.editorconfig` (UTF-8, LF, 4-space, trim trailing whitespace, final newline; Markdown/Makefile/YAML overrides).
+  - `Makefile` (install, sync, lint, format, typecheck, test, doctor, run, clean, hooks).
+  - `.pre-commit-config.yaml` (ruff check, ruff format, mypy; pytest as a manual stage); `pre-commit` added to dev extras.
+  - Validation: Ruff, MyPy, Pytest (30) all green; `factory version`/`doctor` run.
 - **Sprint 001 — Project Foundation — done:**
   - `src/` layout with Clean Architecture layer packages (`domain`, `application`, `infrastructure`, `interface`, `shared`) under `src/ai_video_factory/` (ADR-011).
   - Configuration: typed `Settings` tree via `pydantic-settings`, `.env` support, fail-fast `ConfigurationError`.
@@ -44,7 +62,7 @@
 
 ## 5. Current Branch
 
-`feat/sprint001-foundation`. `main` is protected.
+`feat/sprint002-provider-layer`. `main` is protected.
 
 ## 6. Architecture Version
 
@@ -62,31 +80,42 @@
 | Video | `VideoComposer` | — | `FfmpegVideoComposer` | planned (Sprint 013) |
 | Persistence | `ProjectRepository`, `UnitOfWork` | `sqlite` | `SqlAlchemyProjectRepository` | planned (Sprint 003) |
 
+**AI (LLM) provider layer (infrastructure — Sprint 002):**
+
+| Capability | Contract | Active driver | Adapter | Status |
+|---|---|---|---|---|
+| LLM completion | `LLMProvider` (Protocol) | `gemini` | `GeminiProvider` (`google-genai`) | **implemented** |
+
+Future drivers (Claude, OpenAI, OpenRouter, Ollama, DeepSeek, Qwen) plug in by registering a builder in `ProviderFactory`; no existing code changes (ADR-005).
+
 ## 8. Modules (layer readiness)
 
 | Layer | Package | Status |
 |---|---|---|
-| Domain | `src/ai_video_factory/domain/` | package marker only (populated Sprint 002+) |
-| Application | `src/ai_video_factory/application/` | package marker only (populated Sprint 002+) |
-| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics** implemented |
+| Domain | `src/ai_video_factory/domain/` | package marker only (populated later) |
+| Application | `src/ai_video_factory/application/` | package marker only (populated later) |
+| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics, providers (base/gemini/factory)** implemented |
 | Interface | `src/ai_video_factory/interface/` | **cli, presenters** implemented |
-| Shared | `src/ai_video_factory/shared/` | package marker only |
+| Shared | `src/ai_video_factory/shared/` | **health** implemented |
 
 ## 9. Current Tasks
 
-- [x] `src/` layout + Clean Architecture layer packages created.
-- [x] Configuration, logging, exceptions, CLI (`version`, `doctor`), diagnostics implemented.
-- [x] Ruff + MyPy(strict) + Pytest configured and passing (30 tests).
-- [x] `pyproject` packaging produces the `factory` console script (`factory version`, `factory doctor` verified).
+- [x] LLM provider contract (Protocol, request/response/usage models, error hierarchy).
+- [x] `RetryPolicy` (429/503/timeout, exponential backoff) + configurable timeout.
+- [x] `GeminiProvider` over `google-genai` (SDK isolated + lazily imported); API key from settings.
+- [x] `ProviderFactory` config-driven selection; `ProviderSettings` added.
+- [x] `doctor` AI-provider health check (OK/WARN/FAIL); tri-state diagnostics.
+- [x] Ruff + MyPy(strict) + Pytest passing (65 tests); CLI verified.
 
 ## 10. Next Tasks
 
-- Await next Sprint spec from the Lead. Per roadmap, the natural next increment is the **Domain Core** (entities, value objects, enums) — not to be implemented until specified.
+- Await next Sprint spec from the Lead. Additional LLM drivers (Claude, OpenAI, OpenRouter, Ollama, DeepSeek, Qwen) each register a `ProviderFactory` builder + adapter when specified — do not implement ahead of their sprint.
 
 ## 11. Known Issues
 
-- `factory doctor` reports **FFmpeg: FAIL** on machines without ffmpeg installed (expected — ffmpeg is a documented runtime dependency, `08_ENVIRONMENT.md`). Not a code defect.
-- import-linter is not yet wired as an automated gate (layer boundaries currently upheld by construction/review). Tracked for a later tooling pass.
+- `factory doctor` reports **FFmpeg: FAIL** on machines without ffmpeg installed (expected — documented runtime dependency, `08_ENVIRONMENT.md`). Not a code defect.
+- `RealGeminiClient` (live `google-genai` calls) is not exercised by the test suite by design (tests use a fake client — no real API calls). It is covered manually via `doctor` when a key is configured.
+- import-linter is not yet wired as an automated gate (layer boundaries upheld by construction/review). Tracked for a later tooling pass.
 
 ## 12. Blocked By
 
@@ -122,12 +151,11 @@ Full records in `04_DECISIONS.md`.
 | Metric | Value | As of |
 |---|---|---|
 | Version | 0.1.0-dev | 2026-07-18 |
-| Sprint | 001 — Project Foundation (delivered) | 2026-07-18 |
-| Roadmap progress | ~10% | 2026-07-18 |
-| Stages implemented | 0 / 6 | 2026-07-18 |
-| Providers wired | 0 | 2026-07-18 |
-| Ports with contract tests | 0 / 7 | 2026-07-18 |
-| Tests | 30 passing | 2026-07-18 |
+| Sprint | 002 — AI Provider Layer (delivered) | 2026-07-18 |
+| Roadmap progress | ~15% | 2026-07-18 |
+| Pipeline stages implemented | 0 / 6 | 2026-07-18 |
+| LLM providers implemented | 1 (gemini) | 2026-07-18 |
+| Tests | 65 passing | 2026-07-18 |
 | Open tech-debt items | 6 | 2026-07-18 |
 | Gates (Ruff / MyPy / Pytest) | all green | 2026-07-18 |
 

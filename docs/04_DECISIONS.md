@@ -114,6 +114,19 @@
 - **Consequences:** Import hygiene improves (tests import the installed/`pythonpath` package, not accidental local modules). No change to the layer architecture, ADR-006, or dependency direction. `08_ENVIRONMENT.md` directory layout updated to show `src/`. Concrete tools remain replaceable behind the same layer boundaries.
 - **Alternatives considered:** Flat `src/aivideo/` technical-type packages as first proposed in the Sprint 001 spec (rejected — would replace the approved layer architecture, contradicting §4 and ADR-006); root (non-`src`) layout (rejected — weaker import isolation); Black + Ruff (rejected — redundant formatters).
 
+### ADR-012 — LLM Provider Abstraction (Protocol, Retry, Factory)
+- **Status:** Accepted
+- **Date:** 2026-07-18
+- **Context:** The system must talk to many interchangeable LLM vendors (Gemini, Claude, OpenAI, OpenRouter, Ollama, DeepSeek, Qwen) without the application ever knowing which. This is the concrete realization of ADR-005 for text generation, one layer below the domain capability ports (`StoryGenerator`, `SceneBuilder`).
+- **Decision:**
+  1. Define a vendor-neutral `LLMProvider` **Protocol** (`generate`, `health_check`, `count_tokens`, `models`) in `infrastructure/providers/base/`, with strongly typed `LLMRequest`/`LLMResponse`/`TokenUsage`/`ProviderHealth` models. This LLM abstraction lives in **infrastructure**, not the domain — it is an internal detail the future domain adapters consume; the domain stays pure and the application never names a provider.
+  2. Provider errors form `AIProviderError → {AuthenticationError, RateLimitError, TimeoutError, ProviderUnavailableError, InvalidResponseError}`, extending the existing `AppError → InfrastructureError → ProviderError` tree — one root, no parallel hierarchy. Concrete clients translate SDK exceptions at the boundary.
+  3. Cross-cutting resilience is a shared `RetryPolicy` (exponential backoff; retries only 429/503/timeout) plus a configurable per-request timeout (`asyncio.wait_for`), applied by the provider — not duplicated per vendor.
+  4. Each concrete provider isolates its vendor SDK behind a small typed client seam (e.g. `GeminiClient`), lazily importing the SDK, so the provider and its tests never depend on the SDK and unit tests make no real API calls.
+  5. `ProviderFactory.create(settings)` selects the provider from config (`provider` driver); adding a vendor registers one builder, changing no existing code (OCP).
+- **Consequences:** LLM vendors are swappable via configuration; the domain/application remain provider-agnostic; resilience and error translation are centralized. Consistent with ADR-005/§12 — a realization, not a deviation.
+- **Alternatives considered:** A monolithic `AIProvider` interface spanning all media (rejected — ISP); putting the LLM port in the domain (rejected — it is an infrastructure detail, not a domain capability; the domain ports are `StoryGenerator`/`SceneBuilder`); depending on each vendor SDK directly in the provider (rejected — untestable, non-isolated).
+
 ---
 
 ### Index
@@ -131,3 +144,4 @@
 | 009 | Resumable checkpoints | Accepted |
 | 010 | Structured logging | Accepted |
 | 011 | src layout + foundation tooling | Accepted |
+| 012 | LLM provider abstraction | Accepted |

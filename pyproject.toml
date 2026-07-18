@@ -13,6 +13,7 @@ dependencies = [
     "rich>=13.7",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "google-genai>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -20,10 +21,11 @@ dev = [
     "pytest>=8.2",
     "mypy>=1.10",
     "ruff>=0.5",
+    "pre-commit>=3.7",
 ]
 
 [project.scripts]
-factory = "ai_video_factory.interface.cli.app:main"
+ai-video-factory = "ai_video_factory.interface.cli.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_video_factory"]
@@ -46,7 +48,16 @@ plugins = ["pydantic.mypy"]
 mypy_path = "src"
 files = ["src"]
 
+[[tool.mypy.overrides]]
+module = ["google.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.22",
+]

@@ -56,7 +56,7 @@ def doctor() -> None:
     _logger.debug("Running doctor diagnostics")
     results = run_all_checks()
     render_diagnostics(results, console=_console)
-    if any(not result.ok for result in results):
+    if any(result.is_failure for result in results):
         raise typer.Exit(code=1)
 
 

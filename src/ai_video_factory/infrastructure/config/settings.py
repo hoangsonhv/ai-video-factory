@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ai_video_factory.errors import ConfigurationError
@@ -61,6 +61,24 @@ class LoggingSettings(BaseModel):
         return level
 
 
+class ProviderSettings(BaseModel):
+    """AI (LLM) provider settings. The active provider is chosen by ``provider``
+    (a config ``driver``); the API key is a secret and never serialized."""
+
+    provider: str = "gemini"
+    api_key: SecretStr | None = None
+    model: str = "gemini-2.0-flash"
+    timeout: float = Field(default=30.0, gt=0.0)
+    retry_count: int = Field(default=3, ge=0)
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _blank_key_is_none(cls, value: object) -> object | None:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
+
 class Settings(BaseSettings):
     """Root settings tree composed of the per-section models."""
 
@@ -75,6 +93,7 @@ class Settings(BaseSettings):
     app: AppSettings = AppSettings()
     database: DatabaseSettings = DatabaseSettings()
     logging: LoggingSettings = LoggingSettings()
+    provider: ProviderSettings = ProviderSettings()
 
 
 def load_settings() -> Settings:

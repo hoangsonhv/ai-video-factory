@@ -13,6 +13,20 @@
 ## [Unreleased]
 
 ### Added
+- **Sprint 002 — AI Provider Layer:** the single, vendor-neutral way the system talks to LLM providers (ADR-012).
+  - `LLMProvider` Protocol (`generate`, `health_check`, `count_tokens`, `models`) with strongly typed `LLMRequest`, `LLMResponse`, `TokenUsage`, `RawCompletion`, `ProviderHealth`.
+  - Provider error hierarchy: `AIProviderError` → `AuthenticationError`, `RateLimitError`, `TimeoutError`, `ProviderUnavailableError`, `InvalidResponseError` (extends the existing `ProviderError` tree).
+  - `RetryPolicy` — exponential backoff retrying only 429/503/timeout; configurable per-request timeout.
+  - `GeminiProvider` (first provider) over the official `google-genai` SDK, isolated behind a `GeminiClient` seam (SDK lazily imported); API key read from settings.
+  - `ProviderFactory.create()` — config-driven provider selection.
+  - `ProviderSettings` (`provider`, `api_key` as `SecretStr`, `model`, `timeout`, `retry_count`); `google-genai` runtime dependency.
+  - `doctor` now checks the AI provider (API key configured + reachable), reporting OK/WARN/FAIL; diagnostics status is tri-state via `shared/health.HealthStatus`.
+  - 35 new tests (models, errors, retry, Gemini via a fake client, factory) — no real API calls.
+- **Sprint 001.5 — Foundation Review Fix:**
+  - `.editorconfig` (UTF-8, LF, 4-space indent, trim trailing whitespace, final newline; Markdown/Makefile/YAML overrides).
+  - `Makefile` targets: `install`, `sync`, `lint`, `format`, `typecheck`, `test`, `doctor`, `run`, `clean`, `hooks`.
+  - `.pre-commit-config.yaml` with ruff check, ruff format, mypy, and a manual-stage pytest hook (local hooks via `uv run`); `pre-commit` added to dev extras.
+  - `.gitkeep` placeholders for `logs/`, `output/`, `data/`.
 - **Sprint 001 — Project Foundation:**
   - `src/` layout with Clean Architecture layer packages under `src/ai_video_factory/` (`domain`, `application`, `infrastructure`, `interface`, `shared`).
   - Configuration: typed `Settings` tree via `pydantic-settings` with `.env` support and fail-fast `ConfigurationError` (env prefix `AIVF_`, `__` nesting).
@@ -41,6 +55,13 @@
 
 ### Fixed
 - _None._
+
+### Changed
+- Expanded `.gitignore` (tooling caches, virtualenvs, coverage, logs, `output/*` and `data/*` with `.gitkeep` negations, `.env`, IDE/OS files).
+- Rewrote `CLAUDE.md` to define project role, architecture rules, sprint rules, coding rules, and review rules.
+
+### Removed
+- Runtime artifacts removed from the working tree (`__pycache__`, `*.pyc`, `*.db`, `*.sqlite`, log files); the `logs/`, `output/`, and `data/` folders are preserved via `.gitkeep`.
 
 ### Security
 - Established the invariant that secrets are handled as `SecretStr`, never logged or persisted, with an active redaction filter (ADR-008, ADR-010).

@@ -18,6 +18,29 @@ def test_defaults_are_applied() -> None:
     assert settings.database.url.startswith("sqlite:///")
 
 
+def test_provider_defaults() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.provider.provider == "gemini"
+    assert settings.provider.api_key is None
+    assert settings.provider.model == "gemini-2.0-flash"
+    assert settings.provider.timeout == 30.0
+    assert settings.provider.retry_count == 3
+
+
+def test_provider_blank_api_key_becomes_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AIVF_PROVIDER__API_KEY", "   ")
+    settings = load_settings()
+    assert settings.provider.api_key is None
+
+
+def test_provider_api_key_is_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AIVF_PROVIDER__API_KEY", "super-secret")
+    settings = load_settings()
+    assert settings.provider.api_key is not None
+    assert "super-secret" not in str(settings.provider)
+    assert settings.provider.api_key.get_secret_value() == "super-secret"
+
+
 def test_environment_variables_override_and_nest(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AIVF_APP__ENVIRONMENT", "prod")
     monkeypatch.setenv("AIVF_LOGGING__LEVEL", "debug")

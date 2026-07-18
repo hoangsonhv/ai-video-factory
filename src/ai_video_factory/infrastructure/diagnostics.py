@@ -1,13 +1,14 @@
 """Environment diagnostics for the ``factory doctor`` command (infrastructure).
 
 Lightweight, self-contained health checks that verify the runtime is ready.
-These are diagnostics only — they do not build the persistence or provider
-layers (which arrive in later sprints); the SQLite check uses the standard
-library purely to confirm connectivity.
+Each check reports a tri-state :class:`~ai_video_factory.shared.health.HealthStatus`
+(OK / WARN / FAIL). The SQLite check uses the standard library purely to
+confirm connectivity; the AI-provider check delegates to the provider layer.
 """
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import sqlite3
 import sys
@@ -18,6 +19,8 @@ from pydantic import BaseModel, ConfigDict
 
 from ai_video_factory.errors import ConfigurationError, PersistenceError
 from ai_video_factory.infrastructure.config.settings import Settings, load_settings
+from ai_video_factory.infrastructure.providers.factory.provider_factory import ProviderFactory
+from ai_video_factory.shared.health import HealthStatus
 
 MIN_PYTHON: tuple[int, int] = (3, 13)
 
@@ -28,8 +31,13 @@ class CheckResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
-    ok: bool
+    status: HealthStatus
     detail: str
+
+    @property
+    def is_failure(self) -> bool:
+        """True only for a hard failure (WARN does not fail the command)."""
+        return self.status is HealthStatus.FAIL
 
 
 def check_python_version() -> CheckResult:
@@ -39,15 +47,15 @@ def check_python_version() -> CheckResult:
     detail = f"{version.major}.{version.minor}.{version.micro}"
     if not ok:
         detail += f" (requires >= {MIN_PYTHON[0]}.{MIN_PYTHON[1]})"
-    return CheckResult(name="Python version", ok=ok, detail=detail)
+    return CheckResult(name="Python version", status=_status(ok), detail=detail)
 
 
 def check_ffmpeg() -> CheckResult:
     """Verify the ``ffmpeg`` executable is discoverable on the PATH."""
     path = shutil.which("ffmpeg")
     if path is None:
-        return CheckResult(name="FFmpeg", ok=False, detail="not found on PATH")
-    return CheckResult(name="FFmpeg", ok=True, detail=path)
+        return CheckResult(name="FFmpeg", status=HealthStatus.FAIL, detail="not found on PATH")
+    return CheckResult(name="FFmpeg", status=HealthStatus.OK, detail=path)
 
 
 def check_output_writable(output_dir: Path) -> CheckResult:
@@ -57,8 +65,10 @@ def check_output_writable(output_dir: Path) -> CheckResult:
         with tempfile.NamedTemporaryFile(dir=output_dir, prefix=".aivf-doctor-"):
             pass
     except OSError as exc:
-        return CheckResult(name="Output folder", ok=False, detail=f"{output_dir}: {exc}")
-    return CheckResult(name="Output folder", ok=True, detail=str(output_dir))
+        return CheckResult(
+            name="Output folder", status=HealthStatus.FAIL, detail=f"{output_dir}: {exc}"
+        )
+    return CheckResult(name="Output folder", status=HealthStatus.OK, detail=str(output_dir))
 
 
 def check_sqlite(db_path: Path) -> CheckResult:
@@ -74,8 +84,8 @@ def check_sqlite(db_path: Path) -> CheckResult:
         error = PersistenceError(
             f"cannot open SQLite database at {db_path}", context={"error": str(exc)}
         )
-        return CheckResult(name="SQLite", ok=False, detail=str(error))
-    return CheckResult(name="SQLite", ok=True, detail=str(db_path))
+        return CheckResult(name="SQLite", status=HealthStatus.FAIL, detail=str(error))
+    return CheckResult(name="SQLite", status=HealthStatus.OK, detail=str(db_path))
 
 
 def check_config_loading() -> tuple[CheckResult, Settings | None]:
@@ -88,9 +98,27 @@ def check_config_loading() -> tuple[CheckResult, Settings | None]:
     try:
         settings = load_settings()
     except ConfigurationError as exc:
-        return CheckResult(name="Configuration", ok=False, detail=str(exc)), None
+        return CheckResult(name="Configuration", status=HealthStatus.FAIL, detail=str(exc)), None
     detail = f"environment={settings.app.environment}"
-    return CheckResult(name="Configuration", ok=True, detail=detail), settings
+    return CheckResult(name="Configuration", status=HealthStatus.OK, detail=detail), settings
+
+
+def check_ai_provider(settings: Settings) -> CheckResult:
+    """Verify the AI provider is configured (API key) and reachable.
+
+    Returns WARN when no API key is configured (the provider is optional at
+    this stage) and FAIL when a configured provider cannot be reached.
+    """
+    try:
+        provider = ProviderFactory.create(settings)
+    except ConfigurationError as exc:
+        return CheckResult(name="AI provider", status=HealthStatus.FAIL, detail=str(exc))
+    health = asyncio.run(provider.health_check())
+    return CheckResult(
+        name="AI provider",
+        status=health.status,
+        detail=f"{settings.provider.provider}: {health.detail}",
+    )
 
 
 def run_all_checks() -> list[CheckResult]:
@@ -105,4 +133,9 @@ def run_all_checks() -> list[CheckResult]:
     if settings is not None:
         results.append(check_output_writable(settings.app.output_dir))
         results.append(check_sqlite(settings.database.path))
+        results.append(check_ai_provider(settings))
     return results
+
+
+def _status(ok: bool) -> HealthStatus:
+    return HealthStatus.OK if ok else HealthStatus.FAIL
