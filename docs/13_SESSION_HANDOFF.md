@@ -19,45 +19,57 @@
 ## Current Handoff
 
 **Session date:** 2026-07-18
-**Author:** Technical Lead
-**Sprint:** 000 — Project Bootstrap & Tooling
+**Author:** Senior Python Engineer
+**Sprint:** 001 — Project Foundation (delivered)
 **Version:** 0.1.0-dev
-**Branch:** `docs/sprint000-doc-set`
+**Branch:** `feat/sprint001-foundation`
 
 ### What was accomplished this session
-- Authored the Architecture Document (canonical) — done in a prior step.
-- Created the complete `docs/` documentation set: `00_PROJECT`, `01_AI_CONTEXT`, `03_ROADMAP`, `04_DECISIONS`, `05_CONVENTIONS`, `06_PROMPT_RULES`, `07_WORKFLOW`, `08_ENVIRONMENT`, `09_PRODUCT_VISION`, `10_TECH_DEBT`, `11_BACKLOG`, `12_PROJECT_STATE`, `13_SESSION_HANDOFF`, `CHANGELOG`.
-- Recorded ADR-001 … ADR-010.
+- Implemented **Sprint 001 — Project Foundation** into a `src/` layout with Clean Architecture layers (ADR-011).
+- Config (`pydantic-settings` + `.env`, fail-fast `ConfigurationError`), Rich + rotating-file logging, `AppError` exception hierarchy, Typer CLI (`version`, `doctor`), diagnostics (Python/FFmpeg/output/config/SQLite), Rich presenter.
+- 30 pytest tests; Ruff (lint + format), MyPy strict, Pytest all green.
+- Verified the `factory` console script and `python -m ai_video_factory` run.
+- Recorded **ADR-011** (src layout + foundation tooling: Typer, pydantic-settings, Rich, Ruff-only formatter).
 
 ### Current in-flight work
-- Sprint 000 deliverables not yet started in code: repository skeleton (`BL-001`) and CI quality gates (`BL-002`).
+- None. Foundation is complete and verified.
 
 ### Next Action (do this first)
-> Create the package skeleton `ai_video_factory/{domain,application,infrastructure,interface,shared}` with empty package markers, then add import-linter contracts encoding the inward-dependency rule (ADR-006), and wire ruff + mypy/pyright(strict) + pytest + import-linter into CI as blocking gates.
+> Wait for the next Sprint specification from the Lead. Per the roadmap the natural next increment is the **Domain Core** (entities, value objects, enums, domain-specific `DomainError` subclasses). Do NOT implement it until it is specified.
 
 ### Context needed to continue
-- **Architecture invariants:** inward-only dependencies; pure domain; providers behind ports selected by config `driver`; entities ≠ ORM models; resumable checkpoints. (See `01_AI_CONTEXT.md` §2.)
-- **Stack:** Python 3.13, async-first, Pydantic v2, SQLAlchemy 2, SQLite, Alembic, ffmpeg, ruff, mypy/pyright, import-linter, pytest. (See ADRs.)
-- **Roadmap position:** Sprint 000 of 020; next foundation milestone `0.1.0` at Sprint 006.
+- **Layout:** package is `src/ai_video_factory/` with layers `domain / application / infrastructure / interface / shared`; cross-cutting `errors.py` at the package root. `domain` and `application` are package markers only so far.
+- **Config:** env vars use prefix `AIVF_` with `__` nesting (e.g. `AIVF_LOGGING__LEVEL`); `.env` supported; `load_settings()` translates validation failures to `ConfigurationError`.
+- **Tooling:** `uv` used locally; `uv pip install -e ".[dev]"`; gates: `ruff check .`, `ruff format --check .`, `mypy src`, `pytest`.
+- **Formatter:** Ruff only (no Black) — confirmed decision this session.
 
 ### Decisions made this session
-- None new beyond documenting ADR-001…010 (all `Accepted`). No architecture changes.
+- **Layout:** Hybrid `src/` + Clean Architecture layers (keep approved package name and layers). Recorded as ADR-011.
+- **Formatter:** Ruff for lint and format; Black not adopted (consistent with conventions §13).
 
 ### Open questions / risks for next session
-- Confirm the packaging tool of record (`pip`/`uv`/`poetry`) for the editable install and `factory` entrypoint — pick one and record it in `08_ENVIRONMENT.md` if it deviates.
-- None blocking.
+- Sprint-numbering divergence: Lead's "Sprint 001 = Project Foundation" vs roadmap's "Sprint 001 = Domain Core". Roadmap re-alignment is the Lead's call.
+- import-linter not yet wired as an automated gate (layers upheld by construction/review). Consider adding in a tooling pass.
 
 ### Files touched this session
-- All of `docs/*.md` (created).
+- Source: all of `src/ai_video_factory/**`, root `main.py`.
+- Tooling/root: `pyproject.toml`, `.gitignore`, `.env.example`, `README.md`.
+- Tests: `tests/**`.
+- Docs: `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`, `04_DECISIONS.md` (ADR-011), `08_ENVIRONMENT.md` (layout note).
 
 ### Do NOT do
 - Do not add a Web UI, FastAPI, or Docker (ADR-001, ADR-004; non-goals).
 - Do not put I/O or vendor code in `domain/`.
-- Do not start pipeline-stage code before the skeleton + CI gates exist.
+- Do not implement any pipeline stage, provider, or workflow — those are future sprints.
 
 ---
 
 ## Handoff History (rolling, newest first)
+
+### 2026-07-18 — Sprint 001 Project Foundation delivered
+- Implemented foundation (config, logging, exceptions, CLI, diagnostics) in `src/` layout; 30 tests; all gates green.
+- Recorded ADR-011 (layout + tooling). CLI verified (`factory version`, `factory doctor`).
+- Handed off to: next Sprint spec (Domain Core is the expected next increment; not yet started).
 
 ### 2026-07-18 — Documentation set established
 - Delivered Architecture Document + full `docs/` set + ADRs.

@@ -11,30 +11,40 @@
 
 **Last updated:** 2026-07-18
 
+> **Sprint numbering note:** The executing plan from the Lead labels the foundation work **"Sprint 001 — Project Foundation"** (bootstrap + config + logging + CLI + exceptions + tests + tooling). This differs from the roadmap's Sprint 001 ("Domain Core"); the foundation was implemented per the Lead's explicit spec. Roadmap re-alignment, if desired, is the Lead's call.
+
 ---
 
 ## 1. Current Version
 
-`0.1.0-dev` (pre-foundation; targeting `0.1.0` at end of Sprint 006)
+`0.1.0-dev` (foundation delivered; targeting `0.1.0` tag at end of the foundation milestone)
 
 ## 2. Current Sprint
 
-**Sprint 000 — Project Bootstrap & Tooling** (see `03_ROADMAP.md`)
+**Sprint 001 — Project Foundation — DELIVERED** (per Lead spec; see also `03_ROADMAP.md`)
 
 ## 3. Completed
 
 - Architecture Document (canonical) — **done**.
 - Full documentation set in `docs/` (`00`–`13`, `CHANGELOG`) — **done**.
-- ADR-001 … ADR-010 recorded — **done**.
+- ADR-001 … ADR-011 recorded — **done**.
+- **Sprint 001 — Project Foundation — done:**
+  - `src/` layout with Clean Architecture layer packages (`domain`, `application`, `infrastructure`, `interface`, `shared`) under `src/ai_video_factory/` (ADR-011).
+  - Configuration: typed `Settings` tree via `pydantic-settings`, `.env` support, fail-fast `ConfigurationError`.
+  - Logging: Rich console + rotating file, config-driven, idempotent.
+  - Exceptions: `AppError` hierarchy (§7) in `errors.py`.
+  - CLI: Typer app with `version` and `doctor` commands + Rich presenter.
+  - Doctor checks: Python version, FFmpeg, writable output folder, config loading, SQLite connectivity.
+  - Tests: 30 pytest tests (errors, settings, logging, diagnostics, CLI).
+  - Tooling: Ruff (lint + format), MyPy strict, Pytest — all green.
 
 ## 4. In Progress
 
-- Sprint 000 deliverables: repository skeleton, tooling, CI gates (`BL-001`, `BL-002`).
+- None. Awaiting the next Sprint specification from the Lead.
 
 ## 5. Current Branch
 
-`docs/sprint000-doc-set` (documentation); skeleton work on `feat/sprint000-bootstrap`.
-`main` is protected.
+`feat/sprint001-foundation`. `main` is protected.
 
 ## 6. Architecture Version
 
@@ -56,26 +66,27 @@
 
 | Layer | Package | Status |
 |---|---|---|
-| Domain | `domain/` | not started (Sprint 001) |
-| Application | `application/` | not started (Sprint 002) |
-| Infrastructure | `infrastructure/` | not started (Sprint 003+) |
-| Interface | `interface/` | not started (Sprint 006) |
-| Shared | `shared/` | not started (Sprint 000/001) |
+| Domain | `src/ai_video_factory/domain/` | package marker only (populated Sprint 002+) |
+| Application | `src/ai_video_factory/application/` | package marker only (populated Sprint 002+) |
+| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics** implemented |
+| Interface | `src/ai_video_factory/interface/` | **cli, presenters** implemented |
+| Shared | `src/ai_video_factory/shared/` | package marker only |
 
 ## 9. Current Tasks
 
-- [ ] `BL-001` Create package skeleton with import-linter contracts.
-- [ ] `BL-002` Wire CI gates (ruff, mypy/pyright strict, import-linter, pytest).
-- [ ] Confirm `pyproject`/packaging + editable install produces a `factory` entrypoint stub.
+- [x] `src/` layout + Clean Architecture layer packages created.
+- [x] Configuration, logging, exceptions, CLI (`version`, `doctor`), diagnostics implemented.
+- [x] Ruff + MyPy(strict) + Pytest configured and passing (30 tests).
+- [x] `pyproject` packaging produces the `factory` console script (`factory version`, `factory doctor` verified).
 
 ## 10. Next Tasks
 
-- Sprint 001: Domain core (`BL-003`) — entities, value objects, enums, `DomainError` hierarchy.
-- Sprint 002: Workflow engine (`BL-004`).
+- Await next Sprint spec from the Lead. Per roadmap, the natural next increment is the **Domain Core** (entities, value objects, enums) — not to be implemented until specified.
 
 ## 11. Known Issues
 
-- None yet (no runtime code). Tech-debt items tracked in `10_TECH_DEBT.md`.
+- `factory doctor` reports **FFmpeg: FAIL** on machines without ffmpeg installed (expected — ffmpeg is a documented runtime dependency, `08_ENVIRONMENT.md`). Not a code defect.
+- import-linter is not yet wired as an automated gate (layer boundaries currently upheld by construction/review). Tracked for a later tooling pass.
 
 ## 12. Blocked By
 
@@ -84,12 +95,12 @@
 ## 13. Roadmap Progress
 
 ```
-[■□□□□□□□□□□□□□□□□□□□□]  Sprint 000 / 020   (5%)
-Milestones: 0.1.0 (S006) · 0.2.0 (S008) · 0.5.0 (S013) · 0.9.0 (S019) · 1.0.0 (S020)
+[██□□□□□□□□□□□□□□□□□□□]  Foundation delivered   (~10%)
+Milestones: 0.1.0 (foundation) · 0.2.0 (first stage e2e) · 0.5.0 (all stages) · 0.9.0 (resumable) · 1.0.0 (release)
 ```
 
-- Completed sprints: none (Sprint 000 in progress).
-- Next milestone: `0.1.0` — Foundation, end of Sprint 006.
+- Foundation (Sprint 001 per Lead spec) delivered.
+- Next milestone: first pipeline stage end-to-end (requires Domain Core first).
 
 ## 14. Important Decisions (quick reference)
 
@@ -111,15 +122,14 @@ Full records in `04_DECISIONS.md`.
 | Metric | Value | As of |
 |---|---|---|
 | Version | 0.1.0-dev | 2026-07-18 |
-| Sprint | 000 / 020 | 2026-07-18 |
-| Roadmap progress | 5% | 2026-07-18 |
+| Sprint | 001 — Project Foundation (delivered) | 2026-07-18 |
+| Roadmap progress | ~10% | 2026-07-18 |
 | Stages implemented | 0 / 6 | 2026-07-18 |
 | Providers wired | 0 | 2026-07-18 |
 | Ports with contract tests | 0 / 7 | 2026-07-18 |
+| Tests | 30 passing | 2026-07-18 |
 | Open tech-debt items | 6 | 2026-07-18 |
-| Open critical backlog | 7 | 2026-07-18 |
-| Test coverage (domain+app) | n/a (no code) | 2026-07-18 |
-| CI status | pending first run | 2026-07-18 |
+| Gates (Ruff / MyPy / Pytest) | all green | 2026-07-18 |
 
 ---
 

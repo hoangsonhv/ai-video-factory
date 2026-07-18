@@ -137,15 +137,18 @@ alembic revision -m "..."   # create a new migration after model changes
 
 ```
 ai-video-factory/
-├── ai_video_factory/     # source (see 00_PROJECT.md)
-├── config/               # config.example.toml, local config.toml (git-ignored)
+├── src/ai_video_factory/ # source, Clean Architecture layers (ADR-011)
 ├── data/                 # SQLite db, git-ignored
+├── logs/                 # rotating log files, git-ignored
 ├── output/               # rendered MP4s, git-ignored
 ├── docs/                 # this documentation set
-└── tests/
+├── tests/
+├── .env.example          # copy to .env (git-ignored) and adjust
+└── pyproject.toml
 ```
 
-`data/`, `output/`, `config/config.toml`, and any secrets file are git-ignored.
+`data/`, `logs/`, `output/`, and `.env` are git-ignored. Environment-driven
+configuration uses the `AIVF_` prefix with `__` nesting (see `.env.example`).
 
 ## 10. Troubleshooting
 

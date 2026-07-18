@@ -102,6 +102,18 @@
 - **Consequences:** Observability-ready without refactoring; clean separation of channels.
 - **Alternatives considered:** Plain `print`/basic logging (rejected — untraceable in async fan-out).
 
+### ADR-011 — `src/` Layout & Foundation Tooling Choices
+- **Status:** Accepted
+- **Date:** 2026-07-18
+- **Context:** Sprint 001 (Project Foundation) had to place the approved Clean Architecture layers on disk and pick concrete foundation tools. The Architecture Document §4 illustrates the package tree without committing to a `src/` prefix, and names layers but not specific CLI/config/logging libraries.
+- **Decision:**
+  1. Adopt a **`src/` layout**: the package is `src/ai_video_factory/`. The approved Clean Architecture **layers are preserved unchanged** (`domain`, `application`, `infrastructure`, `interface`, `shared`); only the physical location gains a `src/` prefix. The cross-cutting `AppError` root lives in `src/ai_video_factory/errors.py` (imports stdlib only, so it never violates the inward dependency rule).
+  2. **CLI:** Typer. **Config:** pydantic-settings. **Console/logging output:** Rich (console handler + `RichHandler`).
+  3. **Formatter:** Ruff for both lint and format; **Black is not adopted** (confirming conventions §13). Running two formatters is avoided.
+  4. **Packaging:** hatchling build backend; `factory` console script entry point.
+- **Consequences:** Import hygiene improves (tests import the installed/`pythonpath` package, not accidental local modules). No change to the layer architecture, ADR-006, or dependency direction. `08_ENVIRONMENT.md` directory layout updated to show `src/`. Concrete tools remain replaceable behind the same layer boundaries.
+- **Alternatives considered:** Flat `src/aivideo/` technical-type packages as first proposed in the Sprint 001 spec (rejected — would replace the approved layer architecture, contradicting §4 and ADR-006); root (non-`src`) layout (rejected — weaker import isolation); Black + Ruff (rejected — redundant formatters).
+
 ---
 
 ### Index
@@ -118,3 +130,4 @@
 | 008 | Config-driven, fail-fast | Accepted |
 | 009 | Resumable checkpoints | Accepted |
 | 010 | Structured logging | Accepted |
+| 011 | src layout + foundation tooling | Accepted |

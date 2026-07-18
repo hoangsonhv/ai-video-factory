@@ -1,7 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "ai-video-factory"
 version = "0.1.0"
-description = "Add your description here"
+description = "CLI-first automated AI video generation pipeline (Idea -> MP4)."
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "typer>=0.12",
+    "rich>=13.7",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "mypy>=1.10",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+factory = "ai_video_factory.interface.cli.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_video_factory"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "TID", "RUF"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]
