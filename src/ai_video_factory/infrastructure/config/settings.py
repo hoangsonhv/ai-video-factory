@@ -97,6 +97,25 @@ class ImageProviderSettings(BaseModel):
         return value
 
 
+class SpeechProviderSettings(BaseModel):
+    """Speech (TTS) provider settings. The active provider is chosen by
+    ``provider``; if ``api_key`` is unset the LLM provider's key is used."""
+
+    provider: str = "gemini_tts"
+    api_key: SecretStr | None = None
+    model: str = "gemini-2.5-flash-preview-tts"
+    voice: str = "Kore"
+    timeout: float = Field(default=60.0, gt=0.0)
+    retry_count: int = Field(default=1, ge=0)
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _blank_key_is_none(cls, value: object) -> object | None:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
+
 class PromptSettings(BaseModel):
     """Prompt engine settings. ``root`` is the directory holding templates."""
 
@@ -119,6 +138,7 @@ class Settings(BaseSettings):
     logging: LoggingSettings = LoggingSettings()
     provider: ProviderSettings = ProviderSettings()
     image_provider: ImageProviderSettings = ImageProviderSettings()
+    speech_provider: SpeechProviderSettings = SpeechProviderSettings()
     prompts: PromptSettings = PromptSettings()
 
 

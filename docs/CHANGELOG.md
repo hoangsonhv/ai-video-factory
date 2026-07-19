@@ -13,6 +13,13 @@
 ## [Unreleased]
 
 ### Added
+- **Sprint 010 — Voice Generator (ADR-020):**
+  - `SpeechProvider` Protocol (`synthesize`, `health_check`, `list_voices`) with `SpeechSynthesisRequest` / `SpeechSynthesisResponse` (`infrastructure/providers/speech/base/`).
+  - `GeminiSpeechProvider` over google-genai Gemini TTS behind a `GeminiTtsClient` seam (SDK lazily imported), retrying transient errors once; reuses the shared `AIProviderError`/`RetryPolicy`/`ProviderHealth`. Gemini PCM is wrapped into WAV (`pcm_to_wav`, no ffmpeg).
+  - `SpeechProviderFactory.create(settings, storage)` — config-driven; speech API key falls back to the LLM key. `SpeechProviderSettings` (provider/api_key/model/voice/timeout/retry_count).
+  - `AudioStorage` (`infrastructure/media/`) → `output/audio/narration.mp3`.
+  - CLI `ai-video-factory tts --chapter <chapter.json>` → Rich spinner; saves `narration.mp3` + `metadata.json` (duration, voice, provider, sample_rate).
+  - 23 new tests (models, audio storage + PCM→WAV, Gemini TTS provider with a fake client, factory, CLI); no real API calls.
 - **Sprint 009 — Pipeline Orchestrator, Phase 1 (ADR-019):**
   - `PipelineRunner` (`infrastructure/pipeline/`) composing the existing idea/outline/chapter/image-prompt generators — sequential, persists each output immediately, stops on the first failure; one shared provider + prompt service.
   - `PipelineRequest` / `PipelineResult` typed models; progress via an injected `on_stage` callback.

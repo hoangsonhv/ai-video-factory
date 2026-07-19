@@ -21,13 +21,21 @@
 
 ## 2. Current Sprint
 
-**Sprint 009 — Pipeline Orchestrator (Phase 1) — DELIVERED** (idea → outline → chapter → image prompts, one command; see also `03_ROADMAP.md`)
+**Sprint 010 — Voice Generator — DELIVERED** (Vietnamese narration audio from chapter.json; see also `03_ROADMAP.md`)
 
 ## 3. Completed
 
 - Architecture Document (canonical) — **done**.
 - Full documentation set in `docs/` (`00`–`13`, `CHANGELOG`) — **done**.
-- ADR-001 … ADR-019 recorded — **done**.
+- ADR-001 … ADR-020 recorded — **done**.
+- **Sprint 010 — Voice Generator — done:**
+  - `SpeechProvider` Protocol (`synthesize`, `health_check`, `list_voices`) + `SpeechSynthesisRequest`/`SpeechSynthesisResponse` in `infrastructure/providers/speech/base/`.
+  - `GeminiSpeechProvider` (google-genai Gemini TTS) behind a `GeminiTtsClient` seam (SDK lazily imported); saves via `AudioStorage`, retries transient errors once. Reuses shared errors/retry/health.
+  - Gemini TTS returns PCM → wrapped into WAV (pure-Python `wave`, no ffmpeg) and saved as `output/audio/narration.mp3`; `metadata.json` (duration, voice, provider, sample_rate).
+  - `SpeechProviderFactory.create(settings, storage)` — config-driven; speech key falls back to the LLM key. `SpeechProviderSettings`.
+  - CLI `ai-video-factory tts --chapter <chapter.json>` → Rich spinner + summary; graceful exit 1.
+  - Tests: 225 total (23 new — models, audio storage + PCM→WAV, Gemini TTS provider with fake client, factory, CLI); no real API calls.
+  - Ruff, MyPy (strict), Pytest all green.
 - **Sprint 009 — Pipeline Orchestrator (Phase 1) — done:**
   - `PipelineRunner` (`infrastructure/pipeline/`) composes the existing four generators — no new business logic. Sequential stages; each output persisted immediately; any failure stops the run (earlier outputs kept). One shared provider + prompt service across all stages.
   - `PipelineRequest` / `PipelineResult` typed models; progress via an injected `on_stage` callback (runner stays Rich-free).
@@ -117,7 +125,7 @@
 
 ## 5. Current Branch
 
-`feat/sprint009-pipeline-orchestrator`. `main` is protected.
+`feat/sprint010-voice-generator`. `main` is protected.
 
 ## 6. Architecture Version
 
@@ -141,8 +149,9 @@
 |---|---|---|---|---|
 | LLM completion (Sprint 002) | `LLMProvider` (Protocol) | `gemini` | `GeminiProvider` (`google-genai`) | **implemented** |
 | Image generation (Sprint 008) | `ImageProvider` (Protocol) | `gemini_imagen` | `GeminiImagenProvider` (`google-genai` Imagen) | **implemented** |
+| Speech / TTS (Sprint 010) | `SpeechProvider` (Protocol) | `gemini_tts` | `GeminiSpeechProvider` (`google-genai` TTS) | **implemented** |
 
-Future drivers plug in by registering a builder in the respective factory (`ProviderFactory` / `ImageProviderFactory`); no existing code changes (ADR-005).
+Future drivers plug in by registering a builder in the respective factory (`ProviderFactory` / `ImageProviderFactory` / `SpeechProviderFactory`); no existing code changes (ADR-005).
 
 **Story generators (Sprint 004–007):** `IdeaGenerator`, `OutlineGenerator`, `ChapterGenerator`, `ImagePromptGenerator` (infrastructure/story). **Image generation (Sprint 008):** `image` CLI → PNGs in `output/images/`. **Pipeline (Sprint 009):** `PipelineRunner` composes the four generators; `generate` runs the whole chain in one command. File-based chain: `ideas.json → story_outline.json → chapter.json → image_prompts.json` (→ `output/images/*.png` via `image`).
 
@@ -152,22 +161,21 @@ Future drivers plug in by registering a builder in the respective factory (`Prov
 |---|---|---|
 | Domain | `src/ai_video_factory/domain/` | **value_objects (IdeaBrief, StoryIdea, StoryOutline, ChapterOutline, StoryChapter, ImagePrompt)** implemented |
 | Application | `src/ai_video_factory/application/` | package marker only (populated later) |
-| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics, providers (llm + image), prompts, story, media, pipeline** implemented |
-| Interface | `src/ai_video_factory/interface/` | **cli (version/doctor/prompt/idea/outline/chapter/image-prompt/image/generate), presenters** implemented |
+| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics, providers (llm + image + speech), prompts, story, media, pipeline** implemented |
+| Interface | `src/ai_video_factory/interface/` | **cli (version/doctor/prompt/idea/outline/chapter/image-prompt/image/generate/tts), presenters** implemented |
 | Shared | `src/ai_video_factory/shared/` | **health** implemented |
 
 ## 9. Current Tasks
 
-- [x] `PipelineRunner` composing the four existing generators (no duplicated logic).
-- [x] Sequential stages, persist-after-each, stop-on-failure; shared provider + prompts.
-- [x] `PipelineRequest`/`PipelineResult`; `on_stage` progress callback.
-- [x] CLI `generate` (Rich progress `[n/4]` + summary); graceful error handling.
-- [x] Integration tests with a stage-aware fake provider (all outputs / stop-on-failure / CLI).
-- [x] Ruff + MyPy(strict) + Pytest passing (198 tests); verified live end-to-end.
+- [x] `SpeechProvider` Protocol + request/response models; reuse shared errors/retry/health.
+- [x] `GeminiSpeechProvider` (google-genai TTS) behind a `GeminiTtsClient` seam; PCM→WAV; retry once; `AudioStorage`.
+- [x] `SpeechProviderFactory` (config-driven, key fallback); `SpeechProviderSettings`.
+- [x] CLI `tts` (Rich spinner + `output/audio/narration.mp3` + `metadata.json`); graceful error handling.
+- [x] Ruff + MyPy(strict) + Pytest passing (225 tests); CLI verified.
 
 ## 10. Next Tasks
 
-- Await next Sprint spec from the Lead. `generate` runs idea→image-prompts; wiring in image generation (Phase 2) is the natural next step, but **only build when specified**.
+- Await next Sprint spec from the Lead. Narration audio now exists alongside images; a media/composition stage (needs ffmpeg) and subtitles are later stages — **only build when specified**.
 
 ## 11. Known Issues
 
@@ -209,12 +217,12 @@ Full records in `04_DECISIONS.md`.
 | Metric | Value | As of |
 |---|---|---|
 | Version | 0.1.0-dev | 2026-07-18 |
-| Sprint | 009 — Pipeline Orchestrator (Phase 1, delivered) | 2026-07-19 |
-| Roadmap progress | ~42% | 2026-07-19 |
-| Pipeline | `generate`: idea→outline→chapter→image-prompts (one command) | 2026-07-19 |
-| AI providers implemented | 2 (gemini LLM, gemini_imagen) | 2026-07-19 |
+| Sprint | 010 — Voice Generator (delivered) | 2026-07-19 |
+| Roadmap progress | ~46% | 2026-07-19 |
+| Pipeline | `generate`: idea→outline→chapter→image-prompts; `image`; `tts` | 2026-07-19 |
+| AI providers implemented | 3 (gemini LLM, gemini_imagen, gemini_tts) | 2026-07-19 |
 | Prompt templates | 5 (story×4, image×1) | 2026-07-19 |
-| Tests | 198 passing | 2026-07-19 |
+| Tests | 225 passing | 2026-07-19 |
 | Open tech-debt items | 6 | 2026-07-19 |
 | Gates (Ruff / MyPy / Pytest) | all green | 2026-07-19 |
 

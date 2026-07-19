@@ -1,0 +1,67 @@
+"""``ai-video-factory tts`` CLI command (interface layer).
+
+Reads the chapter narration, synthesizes it with the configured speech provider
+(showing a Rich spinner), and saves the audio plus its metadata. All synthesis
+logic lives in the infrastructure speech provider layer.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from typing import Annotated
+
+import typer
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
+
+from ai_video_factory.errors import AppError
+from ai_video_factory.infrastructure.config.settings import load_settings
+from ai_video_factory.infrastructure.media.audio_storage import AudioStorage
+from ai_video_factory.infrastructure.providers.speech.base.models import (
+    SpeechSynthesisRequest,
+    SpeechSynthesisResponse,
+)
+from ai_video_factory.infrastructure.providers.speech.base.provider import SpeechProvider
+from ai_video_factory.infrastructure.providers.speech.base.writer import write_audio_metadata
+from ai_video_factory.infrastructure.providers.speech.factory.speech_provider_factory import (
+    SpeechProviderFactory,
+)
+from ai_video_factory.infrastructure.story.reader import read_chapter
+from ai_video_factory.interface.presenters.tts_presenter import render_tts_summary
+
+_console = Console()
+
+
+def _synthesize_with_progress(
+    provider: SpeechProvider, request: SpeechSynthesisRequest
+) -> SpeechSynthesisResponse:
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=_console,
+    ) as progress:
+        progress.add_task("Synthesizing narration", total=None)
+        return asyncio.run(provider.synthesize(request))
+
+
+def tts_command(
+    chapter: Annotated[Path, typer.Option("--chapter", help="Path to a chapter JSON file.")],
+    language: Annotated[str, typer.Option("--language", help="Narration language.")] = "vi",
+) -> None:
+    """Synthesize narration audio from a chapter with the configured provider."""
+    settings = load_settings()
+    audio_dir = settings.app.output_dir / "audio"
+    storage = AudioStorage(audio_dir)
+    try:
+        story_chapter = read_chapter(chapter)
+        provider = SpeechProviderFactory.create(settings, storage)
+        request = SpeechSynthesisRequest(text=story_chapter.content, language=language)
+        response = _synthesize_with_progress(provider, request)
+    except AppError as exc:
+        _console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    write_audio_metadata(audio_dir / "metadata.json", response)
+    render_tts_summary(response)
+    _console.print(f"[green]Saved[/green] narration to {response.audio_path}")

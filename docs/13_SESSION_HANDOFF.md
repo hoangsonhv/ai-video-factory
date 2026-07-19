@@ -20,54 +20,61 @@
 
 **Session date:** 2026-07-19
 **Author:** Senior Python Engineer
-**Sprint:** 009 — Pipeline Orchestrator (Phase 1) (delivered)
+**Sprint:** 010 — Voice Generator (delivered)
 **Version:** 0.1.0-dev
-**Branch:** `feat/sprint009-pipeline-orchestrator`
+**Branch:** `feat/sprint010-voice-generator`
 
 ### What was accomplished this session
-- Built the `PipelineRunner` (ADR-019) that **connects the existing generators** — no new business logic:
-  - `infrastructure/pipeline/`: `PipelineRunner` (sequential idea → outline → chapter → image-prompts), `PipelineRequest` / `PipelineResult`.
-  - Persists each output immediately (`ideas.json`, `story_outline.json`, `chapter.json`, `image_prompts.json`); any stage failure stops the run with earlier outputs kept. One shared provider + prompt service across all stages.
-  - Progress via an injected `on_stage(number, total, name)` callback (runner stays Rich-free).
-  - CLI `ai-video-factory generate --topic --style --platform [--chapters]` → Rich progress bar (`[1/4] …`) + summary.
-- **No image generation / TTS / subtitle / ffmpeg / upload** (strict rules honored).
-- Verified: Ruff, MyPy (strict), Pytest (198, +3) all green; integration tests with a stage-aware fake provider; and a **live end-to-end run** produced all four output files.
+- Built the Speech (TTS) provider layer (ADR-020), mirroring the image provider layer (ADR-018):
+  - `infrastructure/providers/speech/base/`: `SpeechProvider` Protocol (`synthesize`, `health_check`, `list_voices`); `SpeechSynthesisRequest` / `SpeechSynthesisResponse` / `SynthesizedAudio`; `write_audio_metadata`.
+  - `infrastructure/providers/speech/gemini/`: `GeminiSpeechProvider` + `GeminiTtsClient` seam over google-genai TTS (SDK lazily imported); retries once; saves via `AudioStorage`. `pcm_to_wav` wraps Gemini's PCM into WAV (no ffmpeg).
+  - `infrastructure/providers/speech/factory/`: `SpeechProviderFactory.create(settings, storage)` (config-driven; speech key falls back to the LLM key).
+  - `infrastructure/media/audio_storage.py`: `AudioStorage` → `output/audio/narration.mp3`.
+  - Config `SpeechProviderSettings`; CLI `tts --chapter <chapter.json>` with a Rich spinner; writes `narration.mp3` + `metadata.json`.
+  - **Reused** the shared `AIProviderError` / `RetryPolicy` / `ProviderHealth` / `HealthStatus` and google-genai `map_status_to_error` — no duplication.
+- Verified: Ruff, MyPy (strict), Pytest (225, +23) all green; `tts --help` and the missing-file graceful-error path run; success path covered by a fake-provider test (narration.mp3 + metadata.json).
 
 ### Current in-flight work
-- None. Pipeline Phase 1 complete and verified.
+- None. Voice generator complete and verified.
 
 ### Next Action (do this first)
-> Wait for the next Sprint specification from the Lead. Phase 2 (wiring image generation into the pipeline) is the natural next step but is a future sprint. Do NOT implement TTS / subtitles / ffmpeg / video / upload / workflow-beyond-this.
+> Wait for the next Sprint specification from the Lead. Do NOT implement subtitles / ffmpeg / video composition / upload / workflow changes — all future sprints.
 
 ### Context needed to continue
-- **`generate` runs the whole chain:** `PipelineRunner.from_settings(settings)` builds one provider + prompt service and injects them into all four generators; `run(request, on_stage=…)` executes the stages, persisting each JSON to `settings.app.output_dir`.
-- **Stop-on-failure:** each generator raises an `AppError` on failure → `run()` propagates → CLI exits 1; completed stages' files remain.
-- **Testing the pipeline:** one `StageAwareFakeProvider` keyed on `request.metadata["stage"]` (`idea`/`outline`/`chapter`/`image_prompt`) returns stage-appropriate JSON; monkeypatch `pipeline.runner.ProviderFactory.create`. The fake's outline chapter count must equal the request's `chapter_count` (the outline parser validates it).
-- **The runner is infrastructure** (composes infrastructure generators); it never imports Rich — the CLI supplies the progress callback.
+- **Three provider layers now:** LLM (`ProviderFactory` → `LLMProvider`), image (`ImageProviderFactory` → `ImageProvider`), speech (`SpeechProviderFactory` → `SpeechProvider`). All share errors/retry/health but are separate Protocols (ISP), each with its own `*ProviderSettings` and key-fallback-to-LLM.
+- **Audio format caveat (ADR-020):** Gemini TTS returns PCM; without ffmpeg it is wrapped to **WAV** and saved under `narration.mp3`. `metadata.json` records the true `sample_rate` (24000). A future media stage can transcode to real MP3.
+- **`tts` flow:** `read_chapter(chapter)` → `SpeechProviderFactory.create(settings, storage)` → `provider.synthesize(SpeechSynthesisRequest(text=chapter.content))` saves the audio and returns the path/duration/sample_rate; the CLI then writes `metadata.json`.
+- **Config:** `AIVF_SPEECH_PROVIDER__{PROVIDER,API_KEY,MODEL,VOICE,TIMEOUT,RETRY_COUNT}`; voice default `Kore`.
+- **Testing TTS code:** inject a fake `GeminiTtsClient` (provider-level) or monkeypatch `SpeechProviderFactory.create` to a fake `SpeechProvider` that uses the real `AudioStorage`; `asyncio.run`; no real API.
 - **Tooling:** `uv`; `make lint/format/typecheck/test`. Console script `ai-video-factory`.
 
 ### Decisions made this session
-- ADR-019 recorded: `PipelineRunner` in infrastructure (composes infrastructure generators; not `application`, which may not import them); sequential + persist-after-each + stop-on-failure; progress via callback; typed request/result; uses the first generated idea.
+- ADR-020 recorded: speech provider layer in infrastructure (mirrors ADR-018); reuses shared building blocks; PCM wrapped to WAV under `narration.mp3` (no ffmpeg); speech API key falls back to the LLM key.
 
 ### Open questions / risks for next session
-- The pipeline uses `ideas[0]` (first idea) automatically — there is no idea-selection step; add a `--index`/selection later if a human-in-the-loop is wanted.
-- Defaults not exposed on `generate`: `target_duration=60s`, `language=vi`, `image_count=6`, `aspect_ratio=9:16`. Add flags if needed.
+- `narration.mp3` currently contains WAV data (not true MP3) — real MP3 needs a transcode step (ffmpeg) in a later media sprint.
+- `RealGeminiTtsClient` (live Gemini TTS `generate_content` with `response_modalities=["AUDIO"]`, PCM extraction, prebuilt voices) is implemented to documented SDK behavior but not exercised by tests (fake client only) — validate against a live key.
 - import-linter still not wired as an automated gate.
 
 ### Files touched this session
-- New source: `infrastructure/pipeline/**` (models, runner), `interface/cli/generate_commands.py`, `interface/presenters/pipeline_presenter.py`.
-- Modified source: `interface/cli/app.py` (register `generate`).
-- Tests: `test_pipeline.py` (new — runner outputs, stop-on-failure, CLI).
-- Docs: `04_DECISIONS.md` (ADR-019), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
+- New source: `infrastructure/media/audio_storage.py`, `infrastructure/providers/speech/**` (base/gemini/factory), `interface/cli/tts_commands.py`, `interface/presenters/tts_presenter.py`.
+- Modified source: `infrastructure/config/settings.py` (+`SpeechProviderSettings`), `infrastructure/media/__init__.py`, `interface/cli/app.py` (register `tts`).
+- Config: `.env.example` (+speech provider vars).
+- Tests: `test_speech_models/audio_storage/gemini_speech_provider/speech_provider_factory/tts_cli.py` (new).
+- Docs: `04_DECISIONS.md` (ADR-020), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
 
 ### Do NOT do
 - Do not add a Web UI, FastAPI, or Docker (ADR-001, ADR-004; non-goals).
 - Do not put I/O or vendor code in `domain/`.
-- Do not implement image generation in the pipeline / TTS / subtitles / ffmpeg / video / upload — future sprints.
+- Do not implement subtitles / ffmpeg / video / upload / workflow changes — future sprints.
 
 ---
 
 ## Handoff History (rolling, newest first)
+
+### 2026-07-19 — Sprint 010 Voice Generator delivered
+- Built `SpeechProvider` Protocol + `GeminiSpeechProvider` (Gemini TTS) + `SpeechProviderFactory` + `AudioStorage` + `tts` CLI (Rich spinner). Reused shared errors/retry/health. PCM→WAV under `output/audio/narration.mp3` + `metadata.json`. 225 tests green; ADR-020 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
 
 ### 2026-07-19 — Sprint 009 Pipeline Orchestrator (Phase 1) delivered
 - Built `PipelineRunner` composing the four existing generators + `generate` CLI (Rich progress); sequential, persist-after-each, stop-on-failure. 198 tests green (incl. integration); live end-to-end verified; ADR-019 recorded.
