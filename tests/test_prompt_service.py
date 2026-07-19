@@ -52,9 +52,24 @@ def test_shipped_prompts_exist_and_validate() -> None:
 
 def test_shipped_idea_renders_with_example_variables() -> None:
     service = PromptService.create(_REPO_PROMPTS)
-    # The `factory prompt render story/idea --var topic=... --var style=...`
-    # example must succeed under StrictUndefined, so idea.md uses exactly these.
-    assert service.validate("story/idea").required_variables == ["style", "topic"]
-    rendered = service.render("story/idea", {"topic": "Tu tiên", "style": "Trung Quốc"})
+    # idea.md drives the `idea` command: it takes the brief plus a count and
+    # must render under StrictUndefined with exactly these variables.
+    assert service.validate("story/idea").required_variables == [
+        "count",
+        "language",
+        "style",
+        "target_platform",
+        "topic",
+    ]
+    rendered = service.render(
+        "story/idea",
+        {
+            "topic": "Tu tiên",
+            "style": "Trung Quốc",
+            "target_platform": "tiktok",
+            "language": "vi",
+            "count": 10,
+        },
+    )
     assert "Tu tiên" in rendered
     assert "Trung Quốc" in rendered

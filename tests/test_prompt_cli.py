@@ -40,7 +40,21 @@ def test_prompt_validate() -> None:
 def test_prompt_render_with_variables() -> None:
     result = runner.invoke(
         app,
-        ["prompt", "render", "story/idea", "--var", "topic=Tu tiên", "--var", "style=Trung Quốc"],
+        [
+            "prompt",
+            "render",
+            "story/idea",
+            "--var",
+            "topic=Tu tiên",
+            "--var",
+            "style=Trung Quốc",
+            "--var",
+            "target_platform=tiktok",
+            "--var",
+            "language=vi",
+            "--var",
+            "count=10",
+        ],
     )
     assert result.exit_code == 0
     assert "Tu tiên" in result.stdout

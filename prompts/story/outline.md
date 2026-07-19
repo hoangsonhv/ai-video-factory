@@ -1,21 +1,41 @@
 # Story Outline
 
 ## Role
-You are a story editor who structures narratives into clear, filmable chapters.
+You are a master story architect for cultivation (xianxia) short videos.
 
 ## Objective
-Turn the story idea into a chapter-by-chapter outline that drives a short video.
+Expand the selected story idea into a complete, structured outline with exactly
+{{ chapter_count }} chapters, paced for a {{ target_duration }} video.
 
 ## Inputs
-- Topic: {{ topic }}
-- Style: {{ style }}
-- Idea: {{ idea }}
+- Idea title: {{ idea_title }}
+- Idea hook: {{ idea_hook }}
+- Idea summary: {{ idea_summary }}
+- Target duration: {{ target_duration }}
+- Chapter count: {{ chapter_count }}
+- Language: {{ language }}
 
 ## Constraints
-- Produce between 5 and 8 chapters.
-- Give each chapter a short title and one or two sentences describing its beats.
-- Keep the arc coherent: setup, rising conflict, climax, and resolution.
-- Preserve the tone of the "{{ style }}" style throughout.
+- Write every field in {{ language }}.
+- Produce exactly {{ chapter_count }} chapter outlines, numbered 1..{{ chapter_count }}.
+- Every field must be non-empty. Each chapter needs a cliffhanger; the final
+  chapter's cliffhanger may tease the resolution or a sequel.
+- Keep the world setting, cultivation system, and characters internally consistent.
+- Provide 2-4 supporting characters.
 
 ## Output
-Return a numbered list, one entry per chapter.
+Return ONLY valid JSON (no prose, no markdown fences) in this exact shape:
+{
+  "title": "...",
+  "genre": "...",
+  "world_setting": "...",
+  "cultivation_system": "...",
+  "main_character": "...",
+  "supporting_characters": ["...", "..."],
+  "antagonist": "...",
+  "story_arc": "...",
+  "ending": "...",
+  "chapter_outlines": [
+    { "chapter_number": 1, "title": "...", "summary": "...", "cliffhanger": "..." }
+  ]
+}

@@ -20,55 +20,78 @@
 
 **Session date:** 2026-07-19
 **Author:** Senior Python Engineer
-**Sprint:** 003 — Prompt Engine (delivered)
+**Sprint:** 009 — Pipeline Orchestrator (Phase 1) (delivered)
 **Version:** 0.1.0-dev
-**Branch:** `feat/sprint003-prompt-engine`
+**Branch:** `feat/sprint009-pipeline-orchestrator`
 
 ### What was accomplished this session
-- Built the Prompt Engine (ADR-013), all in `infrastructure/prompts/`:
-  - `PromptLoader` (load + in-memory cache + `PromptNotFoundError`, path-traversal guarded), `PromptRenderer` (Jinja2, `StrictUndefined`), `PromptValidator` (exists + syntax + required variables), `PromptService` façade (`render`/`validate`/`list_prompts`/`load`).
-  - Error hierarchy `PromptError → PromptNotFoundError/PromptValidationError/PromptRenderError` (extends `InfrastructureError`).
-  - Templates under configurable root `prompts/` (`story/{idea,outline,chapter,scene}.md`, `image/image_prompt.md`) — no prompt text in Python.
-  - Config `PromptSettings.root`; CLI `prompt list/show/validate/render`.
-- Verified: Ruff, MyPy (strict), Pytest (91, +26) all green; all four `prompt` CLI examples run, including `render story/idea --var topic="Tu tiên" --var style="Trung Quốc"`.
-- Fixed a real bug: raw Unicode CLI output crashed on legacy Windows (cp1252) via Rich; raw text now written as UTF-8 bytes.
+- Built the `PipelineRunner` (ADR-019) that **connects the existing generators** — no new business logic:
+  - `infrastructure/pipeline/`: `PipelineRunner` (sequential idea → outline → chapter → image-prompts), `PipelineRequest` / `PipelineResult`.
+  - Persists each output immediately (`ideas.json`, `story_outline.json`, `chapter.json`, `image_prompts.json`); any stage failure stops the run with earlier outputs kept. One shared provider + prompt service across all stages.
+  - Progress via an injected `on_stage(number, total, name)` callback (runner stays Rich-free).
+  - CLI `ai-video-factory generate --topic --style --platform [--chapters]` → Rich progress bar (`[1/4] …`) + summary.
+- **No image generation / TTS / subtitle / ffmpeg / upload** (strict rules honored).
+- Verified: Ruff, MyPy (strict), Pytest (198, +3) all green; integration tests with a stage-aware fake provider; and a **live end-to-end run** produced all four output files.
 
 ### Current in-flight work
-- None. Prompt engine complete and verified.
+- None. Pipeline Phase 1 complete and verified.
 
 ### Next Action (do this first)
-> Wait for the next Sprint specification from the Lead. Do NOT implement Story/Scene/Image/Video/Workflow — future sprints. Those stages will consume the prompt engine via `PromptService` and an `LLMProvider` from `ProviderFactory`.
+> Wait for the next Sprint specification from the Lead. Phase 2 (wiring image generation into the pipeline) is the natural next step but is a future sprint. Do NOT implement TTS / subtitles / ffmpeg / video / upload / workflow-beyond-this.
 
 ### Context needed to continue
-- **Prompt engine:** obtain via `PromptService.create(settings.prompts.root)`. Names are `/`-separated without `.md` (e.g. `story/idea`). Rendering is strict: a missing variable → `PromptRenderError`; bad template syntax → `PromptValidationError`.
-- **Shipped templates & their required vars:** `story/idea` → {style, topic}; `story/outline` → {idea, style, topic}; `story/chapter` → {chapter, outline, style, topic}; `story/scene` → {chapter, style}; `image/image_prompt` → {scene, style}.
-- **Config:** `AIVF_PROMPTS__ROOT` (default `prompts/`).
-- **CLI raw text:** goes through `render_text` (UTF-8 bytes) — do not route international prompt content through Rich's console encoder.
+- **`generate` runs the whole chain:** `PipelineRunner.from_settings(settings)` builds one provider + prompt service and injects them into all four generators; `run(request, on_stage=…)` executes the stages, persisting each JSON to `settings.app.output_dir`.
+- **Stop-on-failure:** each generator raises an `AppError` on failure → `run()` propagates → CLI exits 1; completed stages' files remain.
+- **Testing the pipeline:** one `StageAwareFakeProvider` keyed on `request.metadata["stage"]` (`idea`/`outline`/`chapter`/`image_prompt`) returns stage-appropriate JSON; monkeypatch `pipeline.runner.ProviderFactory.create`. The fake's outline chapter count must equal the request's `chapter_count` (the outline parser validates it).
+- **The runner is infrastructure** (composes infrastructure generators); it never imports Rich — the CLI supplies the progress callback.
 - **Tooling:** `uv`; `make lint/format/typecheck/test`. Console script `ai-video-factory`.
 
 ### Decisions made this session
-- ADR-013 recorded: prompt engine in infrastructure; single **configurable** prompt root (default `prompts/`); Jinja2 with `StrictUndefined`; no prompt text in code. Supersedes the per-adapter location suggestion in `06_PROMPT_RULES.md` §1 (root is configurable, so that layout is still reachable).
+- ADR-019 recorded: `PipelineRunner` in infrastructure (composes infrastructure generators; not `application`, which may not import them); sequential + persist-after-each + stop-on-failure; progress via callback; typed request/result; uses the first generated idea.
 
 ### Open questions / risks for next session
-- On a truly legacy cp1252 console (not UTF-8), rendered non-ASCII may display as mojibake though it no longer crashes; set the terminal to UTF-8 for correct display. Programmatic use (`PromptService.render`) always returns correct `str`.
+- The pipeline uses `ideas[0]` (first idea) automatically — there is no idea-selection step; add a `--index`/selection later if a human-in-the-loop is wanted.
+- Defaults not exposed on `generate`: `target_duration=60s`, `language=vi`, `image_count=6`, `aspect_ratio=9:16`. Add flags if needed.
 - import-linter still not wired as an automated gate.
 
 ### Files touched this session
-- New source: `infrastructure/prompts/**` (errors, models, loader, renderer, validator, service), `interface/cli/prompt_commands.py`, `interface/presenters/prompt_presenter.py`.
-- Modified source: `infrastructure/config/settings.py` (+`PromptSettings`), `interface/cli/app.py` (register `prompt` sub-app).
-- Templates: `prompts/story/*.md`, `prompts/image/image_prompt.md`.
-- Config/tooling: `pyproject.toml` (+`jinja2`), `.env.example`.
-- Tests: `test_prompt_loader/renderer/validator/service/cli.py` (new); `test_settings.py` (updated).
-- Docs: `04_DECISIONS.md` (ADR-013), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
+- New source: `infrastructure/pipeline/**` (models, runner), `interface/cli/generate_commands.py`, `interface/presenters/pipeline_presenter.py`.
+- Modified source: `interface/cli/app.py` (register `generate`).
+- Tests: `test_pipeline.py` (new — runner outputs, stop-on-failure, CLI).
+- Docs: `04_DECISIONS.md` (ADR-019), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
 
 ### Do NOT do
 - Do not add a Web UI, FastAPI, or Docker (ADR-001, ADR-004; non-goals).
 - Do not put I/O or vendor code in `domain/`.
-- Do not implement Story/Scene/Image/Video/Workflow — those are future sprints.
+- Do not implement image generation in the pipeline / TTS / subtitles / ffmpeg / video / upload — future sprints.
 
 ---
 
 ## Handoff History (rolling, newest first)
+
+### 2026-07-19 — Sprint 009 Pipeline Orchestrator (Phase 1) delivered
+- Built `PipelineRunner` composing the four existing generators + `generate` CLI (Rich progress); sequential, persist-after-each, stop-on-failure. 198 tests green (incl. integration); live end-to-end verified; ADR-019 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 008 Image Provider Layer delivered
+- Built `ImageProvider` Protocol + `GeminiImagenProvider` (Imagen) + `ImageProviderFactory` + `ImageStorage` + `image` CLI (Rich progress bar). Reused shared errors/retry/health. Saves PNGs to `output/images/`. 189 tests green; ADR-018 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 007 Image Prompt Generator delivered
+- Built `ImagePromptGenerator` (infra) + `ImagePrompt` (domain) + `image-prompt` CLI; JSON mode, retry-once, injected style/aspect, `output/image_prompts.json`; `read_chapter` loader. Text only, no images. 169 tests green; ADR-017 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 006 Chapter Generator delivered
+- Built `ChapterGenerator` (infra) + `StoryChapter` (domain) + `chapter` CLI; JSON mode, retry-once, computed duration, `output/chapter.json`; `read_outline` loader. 150 tests green; ADR-016 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 005 Story Outline Generator delivered
+- Built `OutlineGenerator` (infra) + `StoryOutline`/`ChapterOutline` (domain) + `outline` CLI; JSON mode, chapter-count validation, retry-once, `output/story_outline.json`; `read_idea` selector. 130 tests green; ADR-015 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 004 Story Idea Generator delivered
+- Built `IdeaGenerator` (infra) + `StoryIdea`/`IdeaBrief` (domain) + `idea` CLI; JSON mode, retry-once, `output/ideas.json`. Evolved `story/idea.md`. 108 tests green; ADR-014 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
 
 ### 2026-07-19 — Sprint 003 Prompt Engine delivered
 - Built loader/renderer(Jinja2)/validator/service + templates under configurable `prompts/`; CLI `prompt list/show/validate/render`; UTF-8-safe output. 91 tests green; ADR-013 recorded.

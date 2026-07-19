@@ -44,11 +44,9 @@ class PromptRenderer:
         except TemplateSyntaxError as exc:
             raise PromptValidationError(f"invalid template syntax: {exc.message}") from exc
         try:
-            rendered = template.render(**dict(variables))
+            rendered: str = template.render(**dict(variables))
         except UndefinedError as exc:
-            raise PromptRenderError(
-                f"missing prompt variable: {exc.message}"
-            ) from exc
+            raise PromptRenderError(f"missing prompt variable: {exc.message}") from exc
 
         return rendered
 
@@ -62,5 +60,5 @@ class PromptRenderer:
             ast = self._env.parse(source)
         except TemplateSyntaxError as exc:
             raise PromptValidationError(f"invalid template syntax: {exc.message}") from exc
-        variables = jinja_meta.find_undeclared_variables(ast)  # type: ignore[no-untyped-call]
-        return sorted(str(v) for v in variables)
+        variables: set[str] = jinja_meta.find_undeclared_variables(ast)
+        return sorted(variables)

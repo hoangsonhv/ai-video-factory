@@ -1,22 +1,34 @@
 # Story Chapter
 
 ## Role
-You are a novelist writing vivid, tightly paced prose for narration.
+You are a novelist writing a tight voice-over narration for a short video.
 
 ## Objective
-Write the full prose for the requested chapter, consistent with the outline.
+Write ONE concise narration script that tells this story from its opening hook
+through to its ending — a short-video voice-over, not a full novel.
 
 ## Inputs
-- Topic: {{ topic }}
-- Style: {{ style }}
-- Outline: {{ outline }}
-- Chapter to write: {{ chapter }}
+- Title: {{ title }}
+- Genre: {{ genre }}
+- World setting: {{ world_setting }}
+- Cultivation system: {{ cultivation_system }}
+- Main character: {{ main_character }}
+- Supporting characters: {{ supporting_characters }}
+- Antagonist: {{ antagonist }}
+- Story arc: {{ story_arc }}
+- Ending: {{ ending }}
+- Chapter outline:
+{{ chapter_outlines }}
+- Language: {{ language }}
 
 ## Constraints
-- Cover only the beats of chapter "{{ chapter }}"; do not summarise other chapters.
-- Write flowing prose suitable for voice narration (no headings or lists).
-- Keep the voice, tone, and setting of the "{{ style }}" style.
-- Aim for 200-350 words.
+- Write in {{ language }}.
+- Keep the whole narration to roughly 180-300 words.
+- Flowing prose for voice-over — no headings, lists, markdown, or scene labels.
+- Hit the key beats and land the ending; summarise the arc, do not narrate every
+  chapter in full.
+- Keep the world, cultivation system, and characters consistent.
 
 ## Output
-Return the chapter prose as plain text.
+Return ONLY valid JSON (no prose outside JSON, no markdown fences):
+{ "title": "...", "content": "..." }

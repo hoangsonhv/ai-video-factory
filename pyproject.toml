@@ -67,9 +67,12 @@ dev = [
     "mypy>=1.10",
     "ruff>=0.15.22",
     "pre-commit>=3.7",
-    "types-jinja2>=2.11.9",
 ]
 
+# jinja2 (3.1+) ships its own py.typed types. This override only suppresses the
+# "cannot find stub" error when mypy runs in an environment where jinja2 is not
+# installed (e.g. a bare `mypy src`); when jinja2 IS present its real types are
+# used. Per-module, not a global disable.
 [[tool.mypy.overrides]]
-module = ["jinja2.meta"]
+module = ["jinja2", "jinja2.*"]
 ignore_missing_imports = true
