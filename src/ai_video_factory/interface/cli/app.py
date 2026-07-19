@@ -17,9 +17,23 @@ from ai_video_factory.errors import ConfigurationError
 from ai_video_factory.infrastructure.config.settings import LoggingSettings, load_settings
 from ai_video_factory.infrastructure.diagnostics import run_all_checks
 from ai_video_factory.infrastructure.logging.setup import configure_logging
+from ai_video_factory.interface.cli.chapter_commands import chapter_command
+from ai_video_factory.interface.cli.generate_commands import generate_command
+from ai_video_factory.interface.cli.idea_commands import idea_command
+from ai_video_factory.interface.cli.image_commands import image_command
+from ai_video_factory.interface.cli.image_prompt_commands import image_prompt_command
+from ai_video_factory.interface.cli.outline_commands import outline_command
+from ai_video_factory.interface.cli.prompt_commands import prompt_app
 from ai_video_factory.interface.presenters.diagnostics_presenter import render_diagnostics
 
 app = typer.Typer(add_completion=False, help="AI Video Factory command-line interface.")
+app.add_typer(prompt_app, name="prompt")
+app.command("generate")(generate_command)
+app.command("idea")(idea_command)
+app.command("outline")(outline_command)
+app.command("chapter")(chapter_command)
+app.command("image-prompt")(image_prompt_command)
+app.command("image")(image_command)
 _console = Console()
 _logger = logging.getLogger(__name__)
 

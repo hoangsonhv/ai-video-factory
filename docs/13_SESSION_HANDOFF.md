@@ -18,56 +18,84 @@
 
 ## Current Handoff
 
-**Session date:** 2026-07-18
+**Session date:** 2026-07-19
 **Author:** Senior Python Engineer
-**Sprint:** 002 — AI Provider Layer (delivered)
+**Sprint:** 009 — Pipeline Orchestrator (Phase 1) (delivered)
 **Version:** 0.1.0-dev
-**Branch:** `feat/sprint002-provider-layer`
+**Branch:** `feat/sprint009-pipeline-orchestrator`
 
 ### What was accomplished this session
-- Built the AI (LLM) provider layer — the single, vendor-neutral way the system talks to LLM providers (ADR-012):
-  - `infrastructure/providers/base/`: `LLMProvider` Protocol; `LLMRequest`/`LLMResponse`/`TokenUsage`/`RawCompletion`/`ProviderHealth`; `AIProviderError` hierarchy; `RetryPolicy`.
-  - `infrastructure/providers/gemini/`: `GeminiProvider` + `GeminiClient` seam over `google-genai` (SDK isolated + lazily imported).
-  - `infrastructure/providers/factory/`: `ProviderFactory.create()` (config-driven).
-  - `ProviderSettings` (provider/api_key/model/timeout/retry_count); `shared/health.HealthStatus`; `doctor` AI-provider check (OK/WARN/FAIL).
-- Verified: Ruff, MyPy (strict), Pytest (65, +35) all green; `ai-video-factory version`/`doctor` run. mypy caught a real bug (SDK `list()` is an async pager) — fixed.
+- Built the `PipelineRunner` (ADR-019) that **connects the existing generators** — no new business logic:
+  - `infrastructure/pipeline/`: `PipelineRunner` (sequential idea → outline → chapter → image-prompts), `PipelineRequest` / `PipelineResult`.
+  - Persists each output immediately (`ideas.json`, `story_outline.json`, `chapter.json`, `image_prompts.json`); any stage failure stops the run with earlier outputs kept. One shared provider + prompt service across all stages.
+  - Progress via an injected `on_stage(number, total, name)` callback (runner stays Rich-free).
+  - CLI `ai-video-factory generate --topic --style --platform [--chapters]` → Rich progress bar (`[1/4] …`) + summary.
+- **No image generation / TTS / subtitle / ffmpeg / upload** (strict rules honored).
+- Verified: Ruff, MyPy (strict), Pytest (198, +3) all green; integration tests with a stage-aware fake provider; and a **live end-to-end run** produced all four output files.
 
 ### Current in-flight work
-- None. Provider layer complete and verified.
+- None. Pipeline Phase 1 complete and verified.
 
 ### Next Action (do this first)
-> Wait for the next Sprint specification from the Lead. Do NOT implement Story/Scene/Planner/Writer/Workflow/Video/Voice/Subtitle/Prompt-engine — all future sprints. A new LLM vendor is added by registering a builder in `ProviderFactory` + an adapter package, only when specified.
+> Wait for the next Sprint specification from the Lead. Phase 2 (wiring image generation into the pipeline) is the natural next step but is a future sprint. Do NOT implement TTS / subtitles / ffmpeg / video / upload / workflow-beyond-this.
 
 ### Context needed to continue
-- **Provider layer:** the app talks to LLMs ONLY through `LLMProvider` (obtained from `ProviderFactory.create()`); it never names a vendor. Provider errors extend `AppError`. Retry is centralized (429/503/timeout); timeout via `asyncio.wait_for`.
-- **Testing a provider:** inject a fake client satisfying the `GeminiClient` protocol; drive async with `asyncio.run` (no `pytest-asyncio`, no real API calls).
-- **Config:** env `AIVF_PROVIDER__{PROVIDER,API_KEY,MODEL,TIMEOUT,RETRY_COUNT}`; `api_key` is `SecretStr`, blank → `None`.
-- **Tooling:** `uv`; `make lint/format/typecheck/test/doctor/run`. Console script is `ai-video-factory`.
+- **`generate` runs the whole chain:** `PipelineRunner.from_settings(settings)` builds one provider + prompt service and injects them into all four generators; `run(request, on_stage=…)` executes the stages, persisting each JSON to `settings.app.output_dir`.
+- **Stop-on-failure:** each generator raises an `AppError` on failure → `run()` propagates → CLI exits 1; completed stages' files remain.
+- **Testing the pipeline:** one `StageAwareFakeProvider` keyed on `request.metadata["stage"]` (`idea`/`outline`/`chapter`/`image_prompt`) returns stage-appropriate JSON; monkeypatch `pipeline.runner.ProviderFactory.create`. The fake's outline chapter count must equal the request's `chapter_count` (the outline parser validates it).
+- **The runner is infrastructure** (composes infrastructure generators); it never imports Rich — the CLI supplies the progress callback.
+- **Tooling:** `uv`; `make lint/format/typecheck/test`. Console script `ai-video-factory`.
 
 ### Decisions made this session
-- ADR-012 recorded: LLM abstraction lives in **infrastructure** (not domain), realizes ADR-005; vendor SDK isolated behind a typed client seam; resilience centralized; factory config-driven.
-- google-genai ships types, so it is type-checked (only `ignore_missing_imports` fallback kept); no `Any` leaks outward.
+- ADR-019 recorded: `PipelineRunner` in infrastructure (composes infrastructure generators; not `application`, which may not import them); sequential + persist-after-each + stop-on-failure; progress via callback; typed request/result; uses the first generated idea.
 
 ### Open questions / risks for next session
-- `RealGeminiClient` live calls are not unit-tested by design (tests use a fake). Validate manually with a real key via `doctor` / `count_tokens`.
-- `google-genai` SDK surface (async pager, `usage_metadata` fields) was implemented to documented behavior; confirm against a live call when a key is available.
+- The pipeline uses `ideas[0]` (first idea) automatically — there is no idea-selection step; add a `--index`/selection later if a human-in-the-loop is wanted.
+- Defaults not exposed on `generate`: `target_duration=60s`, `language=vi`, `image_count=6`, `aspect_ratio=9:16`. Add flags if needed.
 - import-linter still not wired as an automated gate.
 
 ### Files touched this session
-- New source: `infrastructure/providers/**` (base/gemini/factory), `shared/health.py`.
-- Modified source: `infrastructure/config/settings.py` (+`ProviderSettings`), `infrastructure/diagnostics.py` (tri-state + provider check), `interface/presenters/diagnostics_presenter.py`, `interface/cli/app.py`.
-- Config/tooling: `pyproject.toml` (+`google-genai`, mypy `google.*` override), `.env.example`, `uv.lock`.
-- Tests: `test_provider_models/errors/retry/gemini/factory.py` (new); `test_settings.py`, `test_diagnostics.py` (updated).
-- Docs: `04_DECISIONS.md` (ADR-012), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
+- New source: `infrastructure/pipeline/**` (models, runner), `interface/cli/generate_commands.py`, `interface/presenters/pipeline_presenter.py`.
+- Modified source: `interface/cli/app.py` (register `generate`).
+- Tests: `test_pipeline.py` (new — runner outputs, stop-on-failure, CLI).
+- Docs: `04_DECISIONS.md` (ADR-019), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
 
 ### Do NOT do
 - Do not add a Web UI, FastAPI, or Docker (ADR-001, ADR-004; non-goals).
 - Do not put I/O or vendor code in `domain/`.
-- Do not implement any pipeline stage, prompt engine, or workflow — those are future sprints.
+- Do not implement image generation in the pipeline / TTS / subtitles / ffmpeg / video / upload — future sprints.
 
 ---
 
 ## Handoff History (rolling, newest first)
+
+### 2026-07-19 — Sprint 009 Pipeline Orchestrator (Phase 1) delivered
+- Built `PipelineRunner` composing the four existing generators + `generate` CLI (Rich progress); sequential, persist-after-each, stop-on-failure. 198 tests green (incl. integration); live end-to-end verified; ADR-019 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 008 Image Provider Layer delivered
+- Built `ImageProvider` Protocol + `GeminiImagenProvider` (Imagen) + `ImageProviderFactory` + `ImageStorage` + `image` CLI (Rich progress bar). Reused shared errors/retry/health. Saves PNGs to `output/images/`. 189 tests green; ADR-018 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 007 Image Prompt Generator delivered
+- Built `ImagePromptGenerator` (infra) + `ImagePrompt` (domain) + `image-prompt` CLI; JSON mode, retry-once, injected style/aspect, `output/image_prompts.json`; `read_chapter` loader. Text only, no images. 169 tests green; ADR-017 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 006 Chapter Generator delivered
+- Built `ChapterGenerator` (infra) + `StoryChapter` (domain) + `chapter` CLI; JSON mode, retry-once, computed duration, `output/chapter.json`; `read_outline` loader. 150 tests green; ADR-016 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 005 Story Outline Generator delivered
+- Built `OutlineGenerator` (infra) + `StoryOutline`/`ChapterOutline` (domain) + `outline` CLI; JSON mode, chapter-count validation, retry-once, `output/story_outline.json`; `read_idea` selector. 130 tests green; ADR-015 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 004 Story Idea Generator delivered
+- Built `IdeaGenerator` (infra) + `StoryIdea`/`IdeaBrief` (domain) + `idea` CLI; JSON mode, retry-once, `output/ideas.json`. Evolved `story/idea.md`. 108 tests green; ADR-014 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
+
+### 2026-07-19 — Sprint 003 Prompt Engine delivered
+- Built loader/renderer(Jinja2)/validator/service + templates under configurable `prompts/`; CLI `prompt list/show/validate/render`; UTF-8-safe output. 91 tests green; ADR-013 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
 
 ### 2026-07-18 — Sprint 002 AI Provider Layer delivered
 - Built LLM provider abstraction (Protocol, models, error hierarchy, retry, timeout), `GeminiProvider` over `google-genai` (isolated behind a client seam), `ProviderFactory`, provider config, and a `doctor` AI-provider health check. 65 tests green; ADR-012 recorded.
