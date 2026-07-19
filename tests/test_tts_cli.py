@@ -71,3 +71,44 @@ def test_tts_command_synthesizes_and_saves(monkeypatch: pytest.MonkeyPatch, tmp_
 def test_tts_command_missing_chapter_fails(tmp_path: Path) -> None:
     result = runner.invoke(app, ["tts", "--chapter", str(tmp_path / "nope.json")])
     assert result.exit_code == 1
+
+
+def _write_chapter(path: Path) -> None:
+    path.write_text(
+        json.dumps({"title": "T", "content": "Xin chào", "estimated_duration_seconds": 5}),
+        encoding="utf-8",
+    )
+
+
+def test_tts_skips_when_output_exists_without_force(tmp_path: Path) -> None:
+    # Pre-existing narration and no provider wired: if skip works the provider is
+    # never built, so no API key is needed and the file is left untouched.
+    audio_dir = tmp_path / "out" / "audio"
+    audio_dir.mkdir(parents=True)
+    (audio_dir / "narration.mp3").write_bytes(b"OLD")
+    chapter_path = tmp_path / "chapter.json"
+    _write_chapter(chapter_path)
+
+    result = runner.invoke(app, ["tts", "--chapter", str(chapter_path)])
+
+    assert result.exit_code == 0
+    assert "Skipped" in result.stdout
+    assert (audio_dir / "narration.mp3").read_bytes() == b"OLD"
+
+
+def test_tts_force_regenerates_existing_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        tts.SpeechProviderFactory, "create", lambda settings, storage: _FakeSpeechProvider(storage)
+    )
+    audio_dir = tmp_path / "out" / "audio"
+    audio_dir.mkdir(parents=True)
+    (audio_dir / "narration.mp3").write_bytes(b"OLD")
+    chapter_path = tmp_path / "chapter.json"
+    _write_chapter(chapter_path)
+
+    result = runner.invoke(app, ["tts", "--chapter", str(chapter_path), "--force"])
+
+    assert result.exit_code == 0
+    assert (audio_dir / "narration.mp3").read_bytes() == b"FAKEWAV"

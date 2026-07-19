@@ -232,6 +232,18 @@
 - **Consequences:** Narration synthesis is provider-agnostic and testable with a fake `GeminiTtsClient`/`SpeechProvider` (no real API). Reuses `read_chapter`. No image/subtitle/ffmpeg/workflow changes.
 - **Alternatives considered:** Bundling an MP3 encoder like `lameenc` (rejected — heavy native dependency for one stage; WAV suffices until a media stage exists); a single provider abstraction for image + speech (rejected — ISP, different request/response shapes); the provider returning raw bytes for the caller to save (rejected — `audio_path` in the response implies the provider saves; injecting `AudioStorage` keeps it testable).
 
+### ADR-021 — Asset Pipeline Foundation (unifying layer that wraps existing providers)
+- **Status:** Accepted
+- **Date:** 2026-07-19
+- **Context:** The Lead requested an "asset pipeline foundation" — a uniform `AssetResult`, generator interfaces (image/speech/subtitle/video), and an `AssetPipelineRunner`. This overlapped the existing `ImageProvider`/`SpeechProvider` (Sprint 008/010) and `PipelineRunner` (Sprint 009), and its literal "interfaces only, no implementation" collided with CLAUDE.md's no-placeholder / every-sprint-passes rules. The Lead chose to **wrap the existing providers (real, no placeholder)** and to **number this Sprint 011** (Sprint 010 was already the delivered Voice Generator).
+- **Decision:**
+  1. `infrastructure/asset_pipeline/`: a uniform `AssetResult` (`success`, `path`, `duration`, `metadata`), four generator **Protocols** (`ImageGenerator`, `SpeechGenerator`, `SubtitleGenerator`, `VideoComposer`), and `AssetPipelineRunner` (`generate_images`, `generate_voice`, `generate_subtitles`, `compose_video`).
+  2. **Image and voice are real**: `ImageAssetGenerator`/`SpeechAssetGenerator` **delegate to the existing `ImageProvider`/`SpeechProvider`** — no business logic is duplicated (the providers still own generation/retry/save). This is the media-phase orchestrator, complementary to the story-phase `PipelineRunner`.
+  3. **Subtitle and video are contracts only** (Protocols); the runner's `generate_subtitles`/`compose_video` raise a clear `AssetStageUnavailableError` until their sprints wire adapters in — a real guard, not dead code.
+  4. CLI `ai-video-factory assets` shows a status table (images/voice ready; subtitles/video pending); it does **not** run generation. No actual TTS/image/subtitle/ffmpeg/video work in this sprint.
+- **Consequences:** A single asset abstraction now spans all four media stages, reusing the provider layers. Deviates from the spec's literal "no implementation" so that CLAUDE.md's no-placeholder rule holds (image/voice adapters work). Future subtitle/video sprints add adapters and inject them into the runner — no changes to existing stages.
+- **Alternatives considered:** Pure interface-only scaffolding (rejected by the Lead — violates no-placeholder/no-dead-code); making the generators replace the existing providers (rejected — a redesign and duplication); leaving `AssetResult` out and reusing the providers' typed responses directly (rejected — the Lead wants a uniform asset result across the four media stages).
+
 ---
 
 ### Index
@@ -258,3 +270,4 @@
 | 018 | Image provider layer | Accepted |
 | 019 | Pipeline runner (Phase 1) | Accepted |
 | 020 | Speech (TTS) provider layer | Accepted |
+| 021 | Asset pipeline foundation | Accepted |

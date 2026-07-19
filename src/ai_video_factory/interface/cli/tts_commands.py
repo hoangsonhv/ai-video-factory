@@ -31,6 +31,7 @@ from ai_video_factory.infrastructure.story.reader import read_chapter
 from ai_video_factory.interface.presenters.tts_presenter import render_tts_summary
 
 _console = Console()
+_NARRATION_FILENAME = "narration.mp3"
 
 
 def _synthesize_with_progress(
@@ -48,10 +49,20 @@ def _synthesize_with_progress(
 def tts_command(
     chapter: Annotated[Path, typer.Option("--chapter", help="Path to a chapter JSON file.")],
     language: Annotated[str, typer.Option("--language", help="Narration language.")] = "vi",
+    force: Annotated[
+        bool, typer.Option("--force", help="Regenerate even if the audio already exists.")
+    ] = False,
 ) -> None:
     """Synthesize narration audio from a chapter with the configured provider."""
     settings = load_settings()
     audio_dir = settings.app.output_dir / "audio"
+    narration_path = audio_dir / _NARRATION_FILENAME
+    if narration_path.exists() and not force:
+        _console.print(
+            f"[yellow]Skipped[/yellow] {narration_path} already exists (use --force to regenerate)."
+        )
+        return
+
     storage = AudioStorage(audio_dir)
     try:
         story_chapter = read_chapter(chapter)

@@ -54,9 +54,13 @@ def _env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("AIVF_APP__OUTPUT_DIR", str(tmp_path / "out"))
 
 
-def test_image_command_generates_and_saves(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_image_command_generates_saves_and_writes_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setattr(
-        ic.ImageProviderFactory, "create", lambda settings, storage: _FakeImageProvider(storage)
+        ic.ImageProviderFactory,
+        "create",
+        lambda settings, storage, **_: _FakeImageProvider(storage),
     )
     prompts_path = tmp_path / "image_prompts.json"
     prompts_path.write_text(_image_prompts_json(3), encoding="utf-8")
@@ -65,12 +69,50 @@ def test_image_command_generates_and_saves(monkeypatch: pytest.MonkeyPatch, tmp_
 
     assert result.exit_code == 0
     images_dir = tmp_path / "out" / "images"
-    assert (images_dir / "image_001.png").exists()
-    assert (images_dir / "image_002.png").exists()
-    assert (images_dir / "image_003.png").exists()
-    assert (images_dir / "image_001.png").read_bytes() == b"FAKEPNG"
+    assert (images_dir / "001.png").exists()
+    assert (images_dir / "002.png").exists()
+    assert (images_dir / "003.png").exists()
+    assert (images_dir / "001.png").read_bytes() == b"FAKEPNG"
+    manifest = json.loads((images_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["count"] == 3
+    assert manifest["images"][0]["index"] == 1
+    assert manifest["images"][0]["path"].endswith("001.png")
 
 
 def test_image_command_missing_input_fails(tmp_path: Path) -> None:
     result = runner.invoke(app, ["image", "--input", str(tmp_path / "nope.json")])
     assert result.exit_code == 1
+
+
+def test_image_command_skips_when_images_exist_without_force(tmp_path: Path) -> None:
+    # Pre-existing 001.png and no provider wired: if skip works the provider is
+    # never built, so no API key is needed and the file is left untouched.
+    images_dir = tmp_path / "out" / "images"
+    images_dir.mkdir(parents=True)
+    (images_dir / "001.png").write_bytes(b"OLD")
+    prompts_path = tmp_path / "image_prompts.json"
+    prompts_path.write_text(_image_prompts_json(2), encoding="utf-8")
+
+    result = runner.invoke(app, ["image", "--input", str(prompts_path)])
+
+    assert result.exit_code == 0
+    assert "Skipped" in result.stdout
+    assert (images_dir / "001.png").read_bytes() == b"OLD"
+
+
+def test_image_command_force_regenerates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        ic.ImageProviderFactory,
+        "create",
+        lambda settings, storage, **_: _FakeImageProvider(storage),
+    )
+    images_dir = tmp_path / "out" / "images"
+    images_dir.mkdir(parents=True)
+    (images_dir / "001.png").write_bytes(b"OLD")
+    prompts_path = tmp_path / "image_prompts.json"
+    prompts_path.write_text(_image_prompts_json(2), encoding="utf-8")
+
+    result = runner.invoke(app, ["image", "--input", str(prompts_path), "--force"])
+
+    assert result.exit_code == 0
+    assert (images_dir / "001.png").read_bytes() == b"FAKEPNG"

@@ -33,6 +33,19 @@ def test_provider_defaults() -> None:
     assert settings.provider.retry_count == 3
 
 
+def test_speech_provider_defaults_retry_three_times() -> None:
+    speech = Settings(_env_file=None).speech_provider
+    assert speech.provider == "gemini_tts"
+    assert speech.voice == "Kore"
+    assert speech.retry_count == 3
+
+
+def test_image_provider_defaults_retry_three_times() -> None:
+    image = Settings(_env_file=None).image_provider
+    assert image.provider == "gemini_imagen"
+    assert image.retry_count == 3
+
+
 def test_provider_blank_api_key_becomes_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AIVF_PROVIDER__API_KEY", "   ")
     settings = load_settings()

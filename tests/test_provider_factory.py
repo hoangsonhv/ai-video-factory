@@ -39,3 +39,24 @@ def test_map_status_to_error_classifies_codes() -> None:
     assert isinstance(map_status_to_error(429, "x"), RateLimitError)
     assert isinstance(map_status_to_error(503, "x"), ProviderUnavailableError)
     assert isinstance(map_status_to_error(418, "x"), InvalidResponseError)
+
+
+def test_map_status_to_error_429_is_concise_and_carries_retry_after() -> None:
+    from ai_video_factory.infrastructure.providers.gemini.client import map_status_to_error
+
+    payload = "429 RESOURCE_EXHAUSTED ... 'retryDelay': '21s' ..."
+    error = map_status_to_error(429, payload)
+
+    # The user-facing message is concise, not the raw vendor JSON wall.
+    assert "429" in str(error)
+    assert "retryDelay" not in str(error)
+    assert error.retry_after == 21.0
+    # The raw payload is preserved for logs.
+    assert error.context["detail"] == payload
+
+
+def test_map_status_to_error_429_parses_retry_in_phrasing() -> None:
+    from ai_video_factory.infrastructure.providers.gemini.client import map_status_to_error
+
+    error = map_status_to_error(429, "quota exceeded. Please retry in 18.5s.")
+    assert error.retry_after == 18.5

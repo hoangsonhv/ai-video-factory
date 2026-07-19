@@ -49,7 +49,7 @@ class FakeImagenClient:
     async def list_models(self) -> list[str]:
         if self._error is not None:
             raise self._error
-        return ["imagen-3.0-generate-002"]
+        return ["gemini-2.5-flash-image"]
 
 
 def _settings(**overrides: object) -> ImageProviderSettings:

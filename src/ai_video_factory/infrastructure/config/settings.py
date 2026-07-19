@@ -67,7 +67,7 @@ class ProviderSettings(BaseModel):
 
     provider: str = "gemini"
     api_key: SecretStr | None = None
-    model: str = "gemini-2.0-flash"
+    model: str = "gemini-3.5-flash"
     timeout: float = Field(default=30.0, gt=0.0)
     retry_count: int = Field(default=3, ge=0)
 
@@ -85,9 +85,9 @@ class ImageProviderSettings(BaseModel):
 
     provider: str = "gemini_imagen"
     api_key: SecretStr | None = None
-    model: str = "imagen-3.0-generate-002"
+    model: str = "gemini-3.1-flash-image"
     timeout: float = Field(default=60.0, gt=0.0)
-    retry_count: int = Field(default=1, ge=0)
+    retry_count: int = Field(default=3, ge=0)
 
     @field_validator("api_key", mode="before")
     @classmethod
@@ -106,7 +106,7 @@ class SpeechProviderSettings(BaseModel):
     model: str = "gemini-2.5-flash-preview-tts"
     voice: str = "Kore"
     timeout: float = Field(default=60.0, gt=0.0)
-    retry_count: int = Field(default=1, ge=0)
+    retry_count: int = Field(default=3, ge=0)
 
     @field_validator("api_key", mode="before")
     @classmethod

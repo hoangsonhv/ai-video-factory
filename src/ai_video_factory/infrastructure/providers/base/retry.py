@@ -52,9 +52,16 @@ class RetryPolicy:
         while True:
             try:
                 return await operation()
-            except RETRYABLE_ERRORS:
+            except RETRYABLE_ERRORS as exc:
                 if attempt >= self._max_retries:
                     raise
-                delay = min(self._max_delay, self._base_delay * (2**attempt))
+                # Honour the server's back-off hint (e.g. a 429 ``retryDelay``)
+                # when present, so we do not hammer the API; otherwise fall back
+                # to exponential backoff. Both are capped by ``max_delay``.
+                retry_after = getattr(exc, "retry_after", None)
+                if isinstance(retry_after, int | float):
+                    delay = min(self._max_delay, float(retry_after))
+                else:
+                    delay = min(self._max_delay, self._base_delay * (2**attempt))
                 await self._sleep(delay)
                 attempt += 1

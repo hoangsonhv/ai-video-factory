@@ -20,57 +20,73 @@
 
 **Session date:** 2026-07-19
 **Author:** Senior Python Engineer
-**Sprint:** 010 — Voice Generator (delivered)
+**Sprint:** 012 — Implement Image Generation (image hardening) (delivered)
 **Version:** 0.1.0-dev
-**Branch:** `feat/sprint010-voice-generator`
+**Branch:** `feat/sprint012-image-generation`
 
 ### What was accomplished this session
-- Built the Speech (TTS) provider layer (ADR-020), mirroring the image provider layer (ADR-018):
-  - `infrastructure/providers/speech/base/`: `SpeechProvider` Protocol (`synthesize`, `health_check`, `list_voices`); `SpeechSynthesisRequest` / `SpeechSynthesisResponse` / `SynthesizedAudio`; `write_audio_metadata`.
-  - `infrastructure/providers/speech/gemini/`: `GeminiSpeechProvider` + `GeminiTtsClient` seam over google-genai TTS (SDK lazily imported); retries once; saves via `AudioStorage`. `pcm_to_wav` wraps Gemini's PCM into WAV (no ffmpeg).
-  - `infrastructure/providers/speech/factory/`: `SpeechProviderFactory.create(settings, storage)` (config-driven; speech key falls back to the LLM key).
-  - `infrastructure/media/audio_storage.py`: `AudioStorage` → `output/audio/narration.mp3`.
-  - Config `SpeechProviderSettings`; CLI `tts --chapter <chapter.json>` with a Rich spinner; writes `narration.mp3` + `metadata.json`.
-  - **Reused** the shared `AIProviderError` / `RetryPolicy` / `ProviderHealth` / `HealthStatus` and google-genai `map_status_to_error` — no duplication.
-- Verified: Ruff, MyPy (strict), Pytest (225, +23) all green; `tts --help` and the missing-file graceful-error path run; success path covered by a fake-provider test (narration.mp3 + metadata.json).
+- Enhanced the existing Sprint-008 `image` command (reused `ImageProvider`; no refactor). Four additions:
+  - **Filenames:** images now saved as `001.png`, `002.png`, … `ImageStorage` gained backward-compatible empty-prefix support; the default `image` prefix is unchanged, so the asset pipeline still produces `image_001.png`.
+  - **Manifest:** writes `output/images/manifest.json` (count + per-image index/path/provider/model/generation_time) via new `providers/image/base/writer.write_images_manifest`.
+  - **Retry ×3:** `ImageProviderSettings.retry_count` default 1 → **3** (settings + `.env.example`).
+  - **`--force` / skip:** `image` now skips (exit 0, "Skipped …") when `output/images/001.png` already exists, unless `--force` is passed.
+- Everything else unchanged: input `--input`, Rich progress bar, `ImageProviderFactory` seam.
+- Verified: Ruff, MyPy (strict), Pytest (241, +4) all green; skip, `--force`, and `--help` verified live.
 
 ### Current in-flight work
-- None. Voice generator complete and verified.
+- None. image hardening complete and verified.
 
 ### Next Action (do this first)
-> Wait for the next Sprint specification from the Lead. Do NOT implement subtitles / ffmpeg / video composition / upload / workflow changes — all future sprints.
+> Wait for the next Sprint specification from the Lead. The **subtitle** stage and the **video composition** stage (needs ffmpeg) plug into the asset pipeline by implementing `SubtitleGenerator` / `VideoComposer` and injecting them into `AssetPipelineRunner`. Do NOT build them until specified.
 
 ### Context needed to continue
-- **Three provider layers now:** LLM (`ProviderFactory` → `LLMProvider`), image (`ImageProviderFactory` → `ImageProvider`), speech (`SpeechProviderFactory` → `SpeechProvider`). All share errors/retry/health but are separate Protocols (ISP), each with its own `*ProviderSettings` and key-fallback-to-LLM.
-- **Audio format caveat (ADR-020):** Gemini TTS returns PCM; without ffmpeg it is wrapped to **WAV** and saved under `narration.mp3`. `metadata.json` records the true `sample_rate` (24000). A future media stage can transcode to real MP3.
-- **`tts` flow:** `read_chapter(chapter)` → `SpeechProviderFactory.create(settings, storage)` → `provider.synthesize(SpeechSynthesisRequest(text=chapter.content))` saves the audio and returns the path/duration/sample_rate; the CLI then writes `metadata.json`.
-- **Config:** `AIVF_SPEECH_PROVIDER__{PROVIDER,API_KEY,MODEL,VOICE,TIMEOUT,RETRY_COUNT}`; voice default `Kore`.
-- **Testing TTS code:** inject a fake `GeminiTtsClient` (provider-level) or monkeypatch `SpeechProviderFactory.create` to a fake `SpeechProvider` that uses the real `AudioStorage`; `asyncio.run`; no real API.
+- **`image` flow (now):** if `output/images/001.png` exists and no `--force` → skip. Else `read_image_prompts` → `ImageProviderFactory.create` (storage uses `prefix=""` → `001.png`) → per-prompt `generate` (retries transient errors 3×) with a progress bar → `write_images_manifest` → `manifest.json` + summary.
+- **Image retry is now 3** by default (`AIVF_IMAGE_PROVIDER__RETRY_COUNT`); this also applies to the asset pipeline's image generator.
+- **`ImageStorage` prefix:** default `"image"` (→ `image_001.png`, used by the asset pipeline) vs `""` (→ `001.png`, used only by the `image` CLI). Do not change the default — the asset-pipeline test asserts `image_001.png`.
+- **`tts` flow:** if `output/audio/narration.mp3` exists and no `--force` → skip. Else `read_chapter` → `SpeechProviderFactory.create` → `synthesize` (retries 3×) → save + `metadata.json`.
+- **Speech retry is now 3** by default (`AIVF_SPEECH_PROVIDER__RETRY_COUNT`); this also applies to the asset pipeline's `SpeechAssetGenerator`.
+- **Two orchestrators:** `PipelineRunner` (story phase) and `AssetPipelineRunner` (media phase; images/voice ready, subtitle/video pending).
+- **To add subtitle/video:** implement the `SubtitleGenerator`/`VideoComposer` Protocol (returning `AssetResult`), add it in `AssetPipelineRunner.from_settings`, and its stage flips to "ready".
+- **Testing:** inject a fake `GeminiTtsClient`/`SpeechProvider`; `asyncio.run`; no real API. The skip test needs no mock (skip returns before building the provider).
 - **Tooling:** `uv`; `make lint/format/typecheck/test`. Console script `ai-video-factory`.
 
 ### Decisions made this session
-- ADR-020 recorded: speech provider layer in infrastructure (mirrors ADR-018); reuses shared building blocks; PCM wrapped to WAV under `narration.mp3` (no ffmpeg); speech API key falls back to the LLM key.
+- No new ADR — this is a small, spec-scoped hardening of the existing `image` command. Recorded as Sprint 012 (the Lead's label; delivered after Sprint 013, non-linear numbering).
+- Kept `ImageStorage`'s default prefix so the asset pipeline is untouched; only the `image` CLI opts into `prefix=""` → `001.png` (satisfies "do not modify unrelated modules").
+- Whole-run skip keyed on `001.png` (matching the `tts` skip precedent), since the provider's `ImageStorage` auto-numbers and per-image skip would conflict.
 
 ### Open questions / risks for next session
-- `narration.mp3` currently contains WAV data (not true MP3) — real MP3 needs a transcode step (ffmpeg) in a later media sprint.
-- `RealGeminiTtsClient` (live Gemini TTS `generate_content` with `response_modalities=["AUDIO"]`, PCM extraction, prebuilt voices) is implemented to documented SDK behavior but not exercised by tests (fake client only) — validate against a live key.
+- The skip check keys on the fixed path `output/images/001.png`; if a configurable filename is ever needed, thread it through `ImageStorage`.
+- Live Gemini Imagen/TTS calls remain unexercised by tests (fake providers only).
 - import-linter still not wired as an automated gate.
 
 ### Files touched this session
-- New source: `infrastructure/media/audio_storage.py`, `infrastructure/providers/speech/**` (base/gemini/factory), `interface/cli/tts_commands.py`, `interface/presenters/tts_presenter.py`.
-- Modified source: `infrastructure/config/settings.py` (+`SpeechProviderSettings`), `infrastructure/media/__init__.py`, `interface/cli/app.py` (register `tts`).
-- Config: `.env.example` (+speech provider vars).
-- Tests: `test_speech_models/audio_storage/gemini_speech_provider/speech_provider_factory/tts_cli.py` (new).
-- Docs: `04_DECISIONS.md` (ADR-020), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
+- Modified source: `infrastructure/config/settings.py` (image `retry_count` 1→3), `infrastructure/media/image_storage.py` (empty-prefix support), `interface/cli/image_commands.py` (`--force` + skip + `prefix=""` + manifest).
+- New source: `infrastructure/providers/image/base/writer.py` (`write_images_manifest`).
+- Config: `.env.example` (`AIVF_IMAGE_PROVIDER__RETRY_COUNT` 1→3).
+- Tests: `test_image_cli.py` (→`001.png` + manifest, +skip / +force), `test_image_storage.py` (+empty-prefix), `test_settings.py` (+image defaults).
+- Docs: `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) and ADRs untouched.
 
 ### Do NOT do
 - Do not add a Web UI, FastAPI, or Docker (ADR-001, ADR-004; non-goals).
 - Do not put I/O or vendor code in `domain/`.
-- Do not implement subtitles / ffmpeg / video / upload / workflow changes — future sprints.
+- Do not implement subtitle generation, ffmpeg/video composition, or upload — future sprints.
 
 ---
 
 ## Handoff History (rolling, newest first)
+
+### 2026-07-19 — Sprint 012 Implement Image Generation (image hardening) delivered
+- Enhanced the existing `image`: `001.png` naming (empty-prefix `ImageStorage`), `manifest.json`, image retry default 1→3, and `--force`/skip-if-`001.png`-exists. Reused `ImageProvider`, no refactor. 241 tests green; no new ADR.
+- Handed off to: next Sprint spec (subtitle/video stages when specified).
+
+### 2026-07-19 — Sprint 013 Voice Generation (tts hardening) delivered
+- Enhanced the existing `tts`: speech retry default 1→3, and `--force`/skip-if-`narration.mp3`-exists. Reused `SpeechProvider`, no refactor. 237 tests green; no new ADR.
+- Handed off to: next Sprint spec (subtitle/video stages when specified).
+
+### 2026-07-19 — Sprint 011 Asset Pipeline Foundation delivered
+- Built `asset_pipeline` (`AssetResult`, generator Protocols, `AssetPipelineRunner`) wrapping the existing image/speech providers; subtitle/video as contracts (raise until wired); `assets` status CLI. 233 tests green; ADR-021 recorded (renumbered from the Lead's "010").
+- Handed off to: next Sprint spec (subtitle/video stages when specified).
 
 ### 2026-07-19 — Sprint 010 Voice Generator delivered
 - Built `SpeechProvider` Protocol + `GeminiSpeechProvider` (Gemini TTS) + `SpeechProviderFactory` + `AudioStorage` + `tts` CLI (Rich spinner). Reused shared errors/retry/health. PCM→WAV under `output/audio/narration.mp3` + `metadata.json`. 225 tests green; ADR-020 recorded.

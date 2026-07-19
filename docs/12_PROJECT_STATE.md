@@ -21,13 +21,38 @@
 
 ## 2. Current Sprint
 
-**Sprint 010 — Voice Generator — DELIVERED** (Vietnamese narration audio from chapter.json; see also `03_ROADMAP.md`)
+**Sprint 012 — Implement Image Generation (image hardening) — DELIVERED** (`001.png` naming + manifest + retry×3 + `--force`/skip on the existing `image`; see also `03_ROADMAP.md`)
+
+> Enhances the Sprint-008 `image` command (reuses `ImageProvider`); no new architecture. Delivered after Sprint 013 (non-linear numbering follows the Lead's labels). The image counterpart to the Sprint-013 tts hardening.
 
 ## 3. Completed
 
 - Architecture Document (canonical) — **done**.
 - Full documentation set in `docs/` (`00`–`13`, `CHANGELOG`) — **done**.
-- ADR-001 … ADR-020 recorded — **done**.
+- ADR-001 … ADR-021 recorded — **done**.
+- **Sprint 012 — Implement Image Generation (image hardening) — done:**
+  - Enhanced the existing `image` command (Sprint 008) — reuses `ImageProvider`, no refactor:
+    - **Filenames**: images now saved as `001.png`, `002.png`, … (`ImageStorage` gained backward-compatible empty-prefix support; default prefix unchanged, so the asset pipeline still uses `image_001.png`).
+    - **Manifest**: writes `output/images/manifest.json` (count + per-image index/path/provider/model/generation_time) via new `providers/image/base/writer.write_images_manifest`.
+    - **Retry ×3**: `ImageProviderSettings.retry_count` default 1 → **3**.
+    - **`--force` / skip**: skips generation when `output/images/001.png` exists, unless `--force`.
+  - Progress bar unchanged.
+  - Tests: 241 total (4 new — empty-prefix storage, manifest, skip-without-force, `--force`; existing image CLI test updated to `001.png`).
+  - Ruff, MyPy (strict), Pytest all green.
+- **Sprint 013 — Voice Generation (tts hardening) — done:**
+  - Enhanced the existing `tts` command (Sprint 010) — reuses `SpeechProvider`, no refactor:
+    - **Retry ×3**: `SpeechProviderSettings.retry_count` default 1 → **3** (RetryPolicy retries transient errors 3 times).
+    - **`--force` / skip**: if `output/audio/narration.mp3` exists, generation is skipped (exit 0) unless `--force` is passed.
+  - Output/metadata unchanged (`narration.mp3` + `metadata.json` with duration/sample_rate/provider/voice); progress bar unchanged.
+  - Tests: 237 total (4 new — settings retry-3 default, provider retry-3 behavior, skip-without-force, `--force` regenerates).
+  - Ruff, MyPy (strict), Pytest all green.
+- **Sprint 011 — Asset Pipeline Foundation — done:**
+  - `infrastructure/asset_pipeline/`: uniform `AssetResult` (success/path/duration/metadata); generator Protocols `ImageGenerator`, `SpeechGenerator`, `SubtitleGenerator`, `VideoComposer`; `AssetPipelineRunner` (`generate_images`/`generate_voice`/`generate_subtitles`/`compose_video`).
+  - `ImageAssetGenerator` / `SpeechAssetGenerator` adapters **delegate to the existing `ImageProvider` / `SpeechProvider`** (real, no duplication). Subtitle/video are contracts only → the runner raises `AssetStageUnavailableError` until their sprints.
+  - CLI `ai-video-factory assets` shows a status table (images/voice ready; subtitles/video pending) — no generation.
+  - No actual TTS/image/subtitle/ffmpeg/video work (foundation only).
+  - Tests: 233 total (8 new — AssetResult, adapters, runner orchestration + stage status, `assets` CLI); no real API calls.
+  - Ruff, MyPy (strict), Pytest all green.
 - **Sprint 010 — Voice Generator — done:**
   - `SpeechProvider` Protocol (`synthesize`, `health_check`, `list_voices`) + `SpeechSynthesisRequest`/`SpeechSynthesisResponse` in `infrastructure/providers/speech/base/`.
   - `GeminiSpeechProvider` (google-genai Gemini TTS) behind a `GeminiTtsClient` seam (SDK lazily imported); saves via `AudioStorage`, retries transient errors once. Reuses shared errors/retry/health.
@@ -125,7 +150,7 @@
 
 ## 5. Current Branch
 
-`feat/sprint010-voice-generator`. `main` is protected.
+`feat/sprint013-voice-generation`. `main` is protected.
 
 ## 6. Architecture Version
 
@@ -161,21 +186,20 @@ Future drivers plug in by registering a builder in the respective factory (`Prov
 |---|---|---|
 | Domain | `src/ai_video_factory/domain/` | **value_objects (IdeaBrief, StoryIdea, StoryOutline, ChapterOutline, StoryChapter, ImagePrompt)** implemented |
 | Application | `src/ai_video_factory/application/` | package marker only (populated later) |
-| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics, providers (llm + image + speech), prompts, story, media, pipeline** implemented |
-| Interface | `src/ai_video_factory/interface/` | **cli (version/doctor/prompt/idea/outline/chapter/image-prompt/image/generate/tts), presenters** implemented |
+| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics, providers (llm + image + speech), prompts, story, media, pipeline, asset_pipeline** implemented |
+| Interface | `src/ai_video_factory/interface/` | **cli (version/doctor/prompt/idea/outline/chapter/image-prompt/image/generate/tts/assets), presenters** implemented |
 | Shared | `src/ai_video_factory/shared/` | **health** implemented |
 
 ## 9. Current Tasks
 
-- [x] `SpeechProvider` Protocol + request/response models; reuse shared errors/retry/health.
-- [x] `GeminiSpeechProvider` (google-genai TTS) behind a `GeminiTtsClient` seam; PCM→WAV; retry once; `AudioStorage`.
-- [x] `SpeechProviderFactory` (config-driven, key fallback); `SpeechProviderSettings`.
-- [x] CLI `tts` (Rich spinner + `output/audio/narration.mp3` + `metadata.json`); graceful error handling.
-- [x] Ruff + MyPy(strict) + Pytest passing (225 tests); CLI verified.
+- [x] Speech `retry_count` default → 3 (settings + `.env.example`).
+- [x] `tts --force` flag; skip generation when `narration.mp3` already exists.
+- [x] Reused `SpeechProvider`; no unrelated refactor.
+- [x] Ruff + MyPy(strict) + Pytest passing (237 tests); skip/force verified.
 
 ## 10. Next Tasks
 
-- Await next Sprint spec from the Lead. Narration audio now exists alongside images; a media/composition stage (needs ffmpeg) and subtitles are later stages — **only build when specified**.
+- Await next Sprint spec from the Lead. The asset pipeline is scaffolded; the **subtitle** and **video (ffmpeg)** stages plug in by implementing `SubtitleGenerator`/`VideoComposer` and injecting them into `AssetPipelineRunner` — **only build when specified**.
 
 ## 11. Known Issues
 
@@ -217,12 +241,12 @@ Full records in `04_DECISIONS.md`.
 | Metric | Value | As of |
 |---|---|---|
 | Version | 0.1.0-dev | 2026-07-18 |
-| Sprint | 010 — Voice Generator (delivered) | 2026-07-19 |
-| Roadmap progress | ~46% | 2026-07-19 |
-| Pipeline | `generate`: idea→outline→chapter→image-prompts; `image`; `tts` | 2026-07-19 |
+| Sprint | 013 — Voice Generation / tts hardening (delivered) | 2026-07-19 |
+| Roadmap progress | ~50% | 2026-07-19 |
+| Asset stages | images/voice ready; subtitles/video pending | 2026-07-19 |
 | AI providers implemented | 3 (gemini LLM, gemini_imagen, gemini_tts) | 2026-07-19 |
 | Prompt templates | 5 (story×4, image×1) | 2026-07-19 |
-| Tests | 225 passing | 2026-07-19 |
+| Tests | 237 passing | 2026-07-19 |
 | Open tech-debt items | 6 | 2026-07-19 |
 | Gates (Ruff / MyPy / Pytest) | all green | 2026-07-19 |
 

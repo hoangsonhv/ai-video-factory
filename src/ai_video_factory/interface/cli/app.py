@@ -17,6 +17,7 @@ from ai_video_factory.errors import ConfigurationError
 from ai_video_factory.infrastructure.config.settings import LoggingSettings, load_settings
 from ai_video_factory.infrastructure.diagnostics import run_all_checks
 from ai_video_factory.infrastructure.logging.setup import configure_logging
+from ai_video_factory.interface.cli.assets_commands import assets_command
 from ai_video_factory.interface.cli.chapter_commands import chapter_command
 from ai_video_factory.interface.cli.generate_commands import generate_command
 from ai_video_factory.interface.cli.idea_commands import idea_command
@@ -36,6 +37,7 @@ app.command("chapter")(chapter_command)
 app.command("image-prompt")(image_prompt_command)
 app.command("image")(image_command)
 app.command("tts")(tts_command)
+app.command("assets")(assets_command)
 _console = Console()
 _logger = logging.getLogger(__name__)
 

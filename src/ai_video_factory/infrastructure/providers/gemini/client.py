@@ -8,6 +8,7 @@ The SDK is imported lazily so importing this module never requires it.
 
 from __future__ import annotations
 
+import re
 from typing import Protocol
 
 from ai_video_factory.infrastructure.providers.base.errors import (
@@ -18,6 +19,13 @@ from ai_video_factory.infrastructure.providers.base.errors import (
     RateLimitError,
 )
 from ai_video_factory.infrastructure.providers.base.models import LLMRequest, RawCompletion
+
+# The server communicates a back-off hint either as ``'retryDelay': '21s'`` or
+# as ``Please retry in 21.00s`` inside the vendor payload.
+_RETRY_AFTER_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"retryDelay['\"]?\s*:\s*['\"]?\s*([0-9]+(?:\.[0-9]+)?)\s*s", re.IGNORECASE),
+    re.compile(r"retry\s+in\s+([0-9]+(?:\.[0-9]+)?)\s*s", re.IGNORECASE),
+)
 
 
 class GeminiClient(Protocol):
@@ -30,12 +38,35 @@ class GeminiClient(Protocol):
     async def list_models(self) -> list[str]: ...
 
 
+def _parse_retry_after(message: str) -> float | None:
+    """Extract the server-requested back-off (seconds) from a 429 payload."""
+    for pattern in _RETRY_AFTER_PATTERNS:
+        match = pattern.search(message)
+        if match is not None:
+            try:
+                return float(match.group(1))
+            except ValueError:  # pragma: no cover - defensive
+                return None
+    return None
+
+
 def map_status_to_error(status: int, message: str) -> AIProviderError:
-    """Translate an HTTP-ish status code into a provider error."""
+    """Translate an HTTP-ish status code into a provider error.
+
+    The raw vendor ``message`` is kept in ``context`` for logs rather than the
+    user-facing message, so a 429 quota payload does not leak outward as a wall
+    of JSON.
+    """
     if status in (401, 403):
         return AuthenticationError(message, context={"status": status})
     if status == 429:
-        return RateLimitError(message, context={"status": status})
+        retry_after = _parse_retry_after(message)
+        detail = "rate limit or quota exceeded (HTTP 429)"
+        if retry_after is not None:
+            detail += f"; retry in {retry_after:.0f}s"
+        return RateLimitError(
+            detail, retry_after=retry_after, context={"status": status, "detail": message}
+        )
     if status in (500, 502, 503, 504):
         return ProviderUnavailableError(message, context={"status": status})
     return InvalidResponseError(message, context={"status": status})

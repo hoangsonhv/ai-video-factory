@@ -13,6 +13,23 @@
 ## [Unreleased]
 
 ### Added
+- **Sprint 012 — Implement Image Generation (image hardening):** enhanced the existing `image` command (reuses `ImageProvider`, no refactor):
+  - Images are saved as `output/images/001.png`, `002.png`, … (`ImageStorage` gained backward-compatible empty-prefix support; the default `image` prefix is unchanged, so the asset pipeline still produces `image_001.png`).
+  - Writes `output/images/manifest.json` (count + per-image index/path/provider/model/generation_time) via the new `write_images_manifest`.
+  - Image `retry_count` default raised 1 → 3 (transient errors are retried 3 times).
+  - `image --force`; generation is skipped when `output/images/001.png` already exists unless `--force` is given.
+  - 4 new tests (empty-prefix storage, manifest output, skip-without-force, `--force` regenerates); existing image CLI test updated to the `001.png` naming.
+  - (Delivered after Sprint 013; the image counterpart to the tts hardening. Non-linear numbering follows the Lead's labels.)
+- **Sprint 013 — Voice Generation (tts hardening):** enhanced the existing `tts` command (reuses `SpeechProvider`, no refactor):
+  - `tts --force`; generation is skipped when `output/audio/narration.mp3` already exists unless `--force` is given.
+  - Speech `retry_count` default raised 1 → 3 (transient errors are retried 3 times).
+  - 4 new tests (settings retry-3 default, provider retry-3 behavior, skip-without-force, `--force` regenerates).
+- **Sprint 011 — Asset Pipeline Foundation (ADR-021):**
+  - `infrastructure/asset_pipeline/`: uniform `AssetResult` (success/path/duration/metadata); generator Protocols `ImageGenerator`, `SpeechGenerator`, `SubtitleGenerator`, `VideoComposer`; `AssetPipelineRunner` (`generate_images`/`generate_voice`/`generate_subtitles`/`compose_video`).
+  - `ImageAssetGenerator` / `SpeechAssetGenerator` adapters wrap the existing image/speech providers (real, no duplication); subtitle/video are contracts only → the runner raises `AssetStageUnavailableError` until wired.
+  - CLI `ai-video-factory assets` shows the pipeline status (images/voice ready; subtitles/video pending) — no generation.
+  - 8 new tests (AssetResult, adapters, runner orchestration + stage status, `assets` CLI); no real API calls.
+  - (Labelled "Sprint 010" by the Lead but recorded as Sprint 011, since 010 was the delivered Voice Generator.)
 - **Sprint 010 — Voice Generator (ADR-020):**
   - `SpeechProvider` Protocol (`synthesize`, `health_check`, `list_voices`) with `SpeechSynthesisRequest` / `SpeechSynthesisResponse` (`infrastructure/providers/speech/base/`).
   - `GeminiSpeechProvider` over google-genai Gemini TTS behind a `GeminiTtsClient` seam (SDK lazily imported), retrying transient errors once; reuses the shared `AIProviderError`/`RetryPolicy`/`ProviderHealth`. Gemini PCM is wrapped into WAV (`pcm_to_wav`, no ffmpeg).

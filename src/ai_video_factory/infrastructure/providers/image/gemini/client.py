@@ -35,26 +35,43 @@ class RealImagenClient:
         self._api_error: type[Exception] = genai_errors.APIError
 
     async def generate(self, request: ImageGenerationRequest, *, model: str) -> bytes:
-        config = self._types.GenerateImagesConfig(
-            number_of_images=1,
-            aspect_ratio=request.aspect_ratio or None,
-            negative_prompt=request.negative_prompt or None,
-            seed=request.seed,
+        # An api-key client runs in Gemini Developer API mode. There, image
+        # generation is served by the ``gemini-*-image`` models via
+        # ``generate_content`` — the Imagen ``:predict`` endpoint is not
+        # available to Developer API keys. ``negative_prompt`` is unsupported in
+        # this mode and is therefore not forwarded; ``aspect_ratio`` is passed
+        # through ``image_config`` when provided.
+        image_config = (
+            self._types.ImageConfig(aspect_ratio=request.aspect_ratio)
+            if request.aspect_ratio
+            else None
+        )
+        config = self._types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
+            image_config=image_config,
         )
         try:
-            response = await self._client.aio.models.generate_images(
-                model=model, prompt=request.prompt, config=config
+            response = await self._client.aio.models.generate_content(
+                model=model, contents=request.prompt, config=config
             )
         except self._api_error as exc:
             raise map_status_to_error(int(getattr(exc, "code", 0) or 0), str(exc)) from exc
 
-        images = getattr(response, "generated_images", None) or []
-        if not images:
-            raise InvalidResponseError("image provider returned no images")
-        data = getattr(getattr(images[0], "image", None), "image_bytes", None)
+        data = self._first_image_bytes(response)
         if not isinstance(data, bytes) or not data:
-            raise InvalidResponseError("image provider returned empty image data")
+            raise InvalidResponseError("image provider returned no image data")
         return data
+
+    @staticmethod
+    def _first_image_bytes(response: object) -> bytes | None:
+        """Return the bytes of the first inline image part, if any."""
+        for candidate in getattr(response, "candidates", None) or []:
+            content = getattr(candidate, "content", None)
+            for part in getattr(content, "parts", None) or []:
+                data = getattr(getattr(part, "inline_data", None), "data", None)
+                if isinstance(data, bytes) and data:
+                    return data
+        return None
 
     async def list_models(self) -> list[str]:
         try:

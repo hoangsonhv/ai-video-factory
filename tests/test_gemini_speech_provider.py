@@ -116,6 +116,21 @@ def test_synthesize_retries_transient_error(
     assert client.calls == 2
 
 
+def test_synthesize_retries_up_to_three_times(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+    client = FakeTtsClient(fail_times=3)  # succeeds on the 4th call
+    provider = GeminiSpeechProvider(_settings(retry_count=3), AudioStorage(tmp_path), client=client)
+
+    response = asyncio.run(provider.synthesize(_request()))
+    assert response.audio_path.exists()
+    assert client.calls == 4  # initial attempt + 3 retries
+
+
 def test_list_voices(tmp_path: Path) -> None:
     provider = GeminiSpeechProvider(_settings(), AudioStorage(tmp_path), client=FakeTtsClient())
     assert asyncio.run(provider.list_voices()) == ["Kore", "Puck"]

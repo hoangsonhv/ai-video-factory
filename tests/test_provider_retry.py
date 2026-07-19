@@ -52,6 +52,34 @@ def test_retries_then_succeeds() -> None:
     assert counter.delays == [0.1, 0.2]  # exponential backoff
 
 
+def test_retry_after_hint_overrides_exponential_backoff() -> None:
+    counter = _Counter()
+    policy = RetryPolicy(max_retries=2, base_delay=0.1, max_delay=30.0, sleep=counter.sleep)
+
+    async def operation() -> str:
+        counter.calls += 1
+        if counter.calls < 3:
+            raise RateLimitError("429", retry_after=21.0)
+        return "ok"
+
+    assert asyncio.run(policy.run(operation)) == "ok"
+    assert counter.delays == [21.0, 21.0]  # server hint, not [0.1, 0.2]
+
+
+def test_retry_after_hint_is_capped_by_max_delay() -> None:
+    counter = _Counter()
+    policy = RetryPolicy(max_retries=1, base_delay=0.1, max_delay=8.0, sleep=counter.sleep)
+
+    async def operation() -> str:
+        counter.calls += 1
+        if counter.calls == 1:
+            raise RateLimitError("429", retry_after=21.0)
+        return "ok"
+
+    assert asyncio.run(policy.run(operation)) == "ok"
+    assert counter.delays == [8.0]  # capped
+
+
 def test_exhausts_retries_and_raises() -> None:
     counter = _Counter()
     policy = RetryPolicy(max_retries=2, base_delay=0.1, sleep=counter.sleep)

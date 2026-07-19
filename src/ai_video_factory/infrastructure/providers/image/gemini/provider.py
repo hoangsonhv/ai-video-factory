@@ -21,11 +21,11 @@ from ai_video_factory.infrastructure.providers.base.errors import (
     TimeoutError as ProviderTimeoutError,
 )
 from ai_video_factory.infrastructure.providers.base.models import ProviderHealth
-from ai_video_factory.infrastructure.providers.base.retry import RetryPolicy
 from ai_video_factory.infrastructure.providers.image.base.models import (
     ImageGenerationRequest,
     ImageGenerationResponse,
 )
+from ai_video_factory.infrastructure.providers.image.base.rate_limit import ImageRateLimiter
 from ai_video_factory.infrastructure.providers.image.gemini.client import (
     ImagenClient,
     RealImagenClient,
@@ -45,12 +45,15 @@ class GeminiImagenProvider:
         *,
         client: ImagenClient | None = None,
         clock: Callable[[], float] = time.monotonic,
+        on_rate_limit: Callable[[str], None] | None = None,
     ) -> None:
         self._model = settings.model
         self._timeout = settings.timeout
         self._storage = storage
         self._clock = clock
-        self._retry = RetryPolicy(max_retries=settings.retry_count)
+        self._limiter = ImageRateLimiter(
+            max_retries=settings.retry_count, on_rate_limit=on_rate_limit
+        )
         if client is not None:
             self._client: ImagenClient | None = client
         elif settings.api_key is not None:
@@ -61,7 +64,7 @@ class GeminiImagenProvider:
     async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResponse:
         client = self._require_client()
         start = self._clock()
-        data = await self._retry.run(lambda: self._call(client, request))
+        data = await self._limiter.run(lambda: self._call(client, request))
         elapsed = self._clock() - start
         path = self._storage.save(data)
         return ImageGenerationResponse(

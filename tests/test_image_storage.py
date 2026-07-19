@@ -27,3 +27,9 @@ def test_save_writes_bytes_and_creates_dir(tmp_path: Path) -> None:
 def test_custom_prefix(tmp_path: Path) -> None:
     storage = ImageStorage(tmp_path, prefix="scene")
     assert storage.save(b"x").name == "scene_001.png"
+
+
+def test_empty_prefix_numbers_only(tmp_path: Path) -> None:
+    storage = ImageStorage(tmp_path, prefix="")
+    assert storage.save(b"one").name == "001.png"
+    assert storage.save(b"two").name == "002.png"

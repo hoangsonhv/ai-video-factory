@@ -16,8 +16,14 @@ from ai_video_factory.infrastructure.media.image_storage import ImageStorage
 from ai_video_factory.infrastructure.providers.image.base.provider import ImageProvider
 from ai_video_factory.infrastructure.providers.image.gemini.provider import GeminiImagenProvider
 
-_BUILDERS: dict[str, Callable[[ImageProviderSettings, ImageStorage], ImageProvider]] = {
-    "gemini_imagen": GeminiImagenProvider,
+_ImageBuilder = Callable[
+    [ImageProviderSettings, ImageStorage, Callable[[str], None] | None], ImageProvider
+]
+
+_BUILDERS: dict[str, _ImageBuilder] = {
+    "gemini_imagen": lambda image_settings, storage, on_rate_limit: GeminiImagenProvider(
+        image_settings, storage, on_rate_limit=on_rate_limit
+    ),
 }
 
 
@@ -25,8 +31,16 @@ class ImageProviderFactory:
     """Creates the configured :class:`ImageProvider`."""
 
     @staticmethod
-    def create(settings: Settings, storage: ImageStorage) -> ImageProvider:
+    def create(
+        settings: Settings,
+        storage: ImageStorage,
+        *,
+        on_rate_limit: Callable[[str], None] | None = None,
+    ) -> ImageProvider:
         """Build the image provider selected by configuration.
+
+        ``on_rate_limit`` is invoked with a user-facing message when a request
+        is throttled (HTTP 429), so the interface layer can display it.
 
         Raises:
             ConfigurationError: If the configured provider is not supported.
@@ -42,7 +56,7 @@ class ImageProviderFactory:
             raise ConfigurationError(
                 f"unsupported image provider {image_settings.provider!r}; supported: {supported}"
             )
-        return builder(image_settings, storage)
+        return builder(image_settings, storage, on_rate_limit)
 
     @staticmethod
     def supported_providers() -> list[str]:
