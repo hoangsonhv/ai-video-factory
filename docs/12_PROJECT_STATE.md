@@ -9,7 +9,7 @@
 
 **When to update:** At the **start and end of every working session** and at every sprint boundary. Keep it terse and factual. Keep `01_AI_CONTEXT.md` consistent with it.
 
-**Last updated:** 2026-07-18
+**Last updated:** 2026-07-19
 
 > **Sprint numbering note:** The executing plan from the Lead labels the foundation work **"Sprint 001 — Project Foundation"** (bootstrap + config + logging + CLI + exceptions + tests + tooling). This differs from the roadmap's Sprint 001 ("Domain Core"); the foundation was implemented per the Lead's explicit spec. Roadmap re-alignment, if desired, is the Lead's call.
 
@@ -21,13 +21,21 @@
 
 ## 2. Current Sprint
 
-**Sprint 002 — AI Provider Layer — DELIVERED** (LLM abstraction; see also `03_ROADMAP.md`)
+**Sprint 003 — Prompt Engine — DELIVERED** (Jinja2 prompt loader/renderer/validator/service; see also `03_ROADMAP.md`)
 
 ## 3. Completed
 
 - Architecture Document (canonical) — **done**.
 - Full documentation set in `docs/` (`00`–`13`, `CHANGELOG`) — **done**.
-- ADR-001 … ADR-012 recorded — **done**.
+- ADR-001 … ADR-013 recorded — **done**.
+- **Sprint 003 — Prompt Engine — done:**
+  - Prompt templates under configurable root `prompts/` (`story/{idea,outline,chapter,scene}.md`, `image/image_prompt.md`) — no prompt text in Python.
+  - `infrastructure/prompts/`: `PromptLoader` (load + cache + `PromptNotFoundError`), `PromptRenderer` (Jinja2, `StrictUndefined`), `PromptValidator` (exists + syntax + required vars), `PromptService` (`render`, `validate`, `list_prompts`).
+  - Errors: `PromptError → PromptNotFoundError/PromptValidationError/PromptRenderError` (extend `InfrastructureError`).
+  - Config: `PromptSettings.root` (default `prompts/`, env `AIVF_PROMPTS__ROOT`).
+  - CLI: `prompt list` / `prompt show <name>` / `prompt validate` / `prompt render <name> --var k=v` (UTF-8-safe raw output).
+  - Tests: 91 total (26 new — loader, renderer, validator, service incl. shipped templates, CLI).
+  - Ruff, MyPy (strict), Pytest all green.
 - **Sprint 002 — AI Provider Layer — done:**
   - LLM provider contract in `infrastructure/providers/base/`: `LLMProvider` Protocol (`generate`, `health_check`, `count_tokens`, `models`); models `LLMRequest`, `LLMResponse`, `TokenUsage`, `RawCompletion`, `ProviderHealth`.
   - Provider error hierarchy (`AIProviderError` → `AuthenticationError`, `RateLimitError`, `TimeoutError`, `ProviderUnavailableError`, `InvalidResponseError`) extending the `AppError`/`ProviderError` tree.
@@ -62,7 +70,7 @@
 
 ## 5. Current Branch
 
-`feat/sprint002-provider-layer`. `main` is protected.
+`feat/sprint003-prompt-engine`. `main` is protected.
 
 ## 6. Architecture Version
 
@@ -94,22 +102,21 @@ Future drivers (Claude, OpenAI, OpenRouter, Ollama, DeepSeek, Qwen) plug in by r
 |---|---|---|
 | Domain | `src/ai_video_factory/domain/` | package marker only (populated later) |
 | Application | `src/ai_video_factory/application/` | package marker only (populated later) |
-| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics, providers (base/gemini/factory)** implemented |
-| Interface | `src/ai_video_factory/interface/` | **cli, presenters** implemented |
+| Infrastructure | `src/ai_video_factory/infrastructure/` | **config, logging, diagnostics, providers (base/gemini/factory), prompts** implemented |
+| Interface | `src/ai_video_factory/interface/` | **cli (version/doctor/prompt), presenters** implemented |
 | Shared | `src/ai_video_factory/shared/` | **health** implemented |
 
 ## 9. Current Tasks
 
-- [x] LLM provider contract (Protocol, request/response/usage models, error hierarchy).
-- [x] `RetryPolicy` (429/503/timeout, exponential backoff) + configurable timeout.
-- [x] `GeminiProvider` over `google-genai` (SDK isolated + lazily imported); API key from settings.
-- [x] `ProviderFactory` config-driven selection; `ProviderSettings` added.
-- [x] `doctor` AI-provider health check (OK/WARN/FAIL); tri-state diagnostics.
-- [x] Ruff + MyPy(strict) + Pytest passing (65 tests); CLI verified.
+- [x] Prompt templates under configurable `prompts/` root (story + image).
+- [x] `PromptLoader` / `PromptRenderer` (Jinja2) / `PromptValidator` / `PromptService`.
+- [x] Prompt error hierarchy; `PromptSettings.root` config.
+- [x] CLI `prompt list/show/validate/render` (UTF-8-safe output).
+- [x] Ruff + MyPy(strict) + Pytest passing (91 tests); CLI examples verified.
 
 ## 10. Next Tasks
 
-- Await next Sprint spec from the Lead. Additional LLM drivers (Claude, OpenAI, OpenRouter, Ollama, DeepSeek, Qwen) each register a `ProviderFactory` builder + adapter when specified — do not implement ahead of their sprint.
+- Await next Sprint spec from the Lead. The prompt engine is ready to be consumed by future stage adapters (Story/Scene/Image) via `PromptService` — do not implement those stages ahead of their sprint.
 
 ## 11. Known Issues
 
@@ -151,13 +158,14 @@ Full records in `04_DECISIONS.md`.
 | Metric | Value | As of |
 |---|---|---|
 | Version | 0.1.0-dev | 2026-07-18 |
-| Sprint | 002 — AI Provider Layer (delivered) | 2026-07-18 |
-| Roadmap progress | ~15% | 2026-07-18 |
-| Pipeline stages implemented | 0 / 6 | 2026-07-18 |
-| LLM providers implemented | 1 (gemini) | 2026-07-18 |
-| Tests | 65 passing | 2026-07-18 |
-| Open tech-debt items | 6 | 2026-07-18 |
-| Gates (Ruff / MyPy / Pytest) | all green | 2026-07-18 |
+| Sprint | 003 — Prompt Engine (delivered) | 2026-07-19 |
+| Roadmap progress | ~18% | 2026-07-19 |
+| Pipeline stages implemented | 0 / 6 | 2026-07-19 |
+| LLM providers implemented | 1 (gemini) | 2026-07-19 |
+| Prompt templates | 5 (story×4, image×1) | 2026-07-19 |
+| Tests | 91 passing | 2026-07-19 |
+| Open tech-debt items | 6 | 2026-07-19 |
+| Gates (Ruff / MyPy / Pytest) | all green | 2026-07-19 |
 
 ---
 

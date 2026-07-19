@@ -127,6 +127,18 @@
 - **Consequences:** LLM vendors are swappable via configuration; the domain/application remain provider-agnostic; resilience and error translation are centralized. Consistent with ADR-005/§12 — a realization, not a deviation.
 - **Alternatives considered:** A monolithic `AIProvider` interface spanning all media (rejected — ISP); putting the LLM port in the domain (rejected — it is an infrastructure detail, not a domain capability; the domain ports are `StoryGenerator`/`SceneBuilder`); depending on each vendor SDK directly in the provider (rejected — untestable, non-isolated).
 
+### ADR-013 — Prompt Engine (configurable prompt root, Jinja2, service façade)
+- **Status:** Accepted
+- **Date:** 2026-07-19
+- **Context:** The system needs a production-ready way to store, validate, and render prompt templates with variables, without any prompt text living in Python code. `06_PROMPT_RULES.md` originally suggested templates live beside each provider adapter (`infrastructure/providers/<stage>/prompts/`); Sprint 003 instead uses a single, configurable top-level prompt root.
+- **Decision:**
+  1. Prompt templates live under a **configurable prompt root** (`PromptSettings.root`, default `prompts/`, env `AIVF_PROMPTS__ROOT`), organized by stage (`prompts/story/*.md`, `prompts/image/*.md`). A prompt name is a `/`-separated path without extension (e.g. `story/idea`).
+  2. The **engine is infrastructure** (`infrastructure/prompts/`): `PromptLoader` (read + cache + `PromptNotFoundError`), `PromptRenderer` (Jinja2, `StrictUndefined`), `PromptValidator` (exists + syntax + required variables), and a `PromptService` façade (`render`, `validate`, `list_prompts`). Errors extend `InfrastructureError` (`PromptError → PromptNotFoundError/PromptValidationError/PromptRenderError`).
+  3. **No prompt text in Python** — all prompt content is in template files; code only loads/renders them.
+  4. Rendering uses `StrictUndefined` so a missing variable is an explicit `PromptRenderError`; template syntax errors are `PromptValidationError`.
+- **Consequences:** Prompts are editable and versionable as content, decoupled from code, and reusable by any future stage adapter via `PromptService`. Supersedes the location guidance in `06_PROMPT_RULES.md` §1 (the root is configurable, so per-adapter layouts remain possible by pointing the root there). CLI raw text is written as UTF-8 bytes to support international prompt content on legacy Windows consoles.
+- **Alternatives considered:** Prompts beside each adapter (deferred — a single configurable root is simpler and centralizes tooling); a custom `str.format` templating (rejected — Jinja2 gives loops/conditionals, strict-undefined, and variable introspection); embedding prompts as Python constants (rejected — violates "no hardcoded prompt").
+
 ---
 
 ### Index
@@ -145,3 +157,4 @@
 | 010 | Structured logging | Accepted |
 | 011 | src layout + foundation tooling | Accepted |
 | 012 | LLM provider abstraction | Accepted |
+| 013 | Prompt engine (Jinja2, config root) | Accepted |

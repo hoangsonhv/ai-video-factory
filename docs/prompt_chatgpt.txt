@@ -16,3 +16,15 @@ Sau khi đọc xong:
 - Chỉ tập trung vào Sprint đó.
 - Không đề xuất thay đổi kiến trúc nếu không thật sự cần.
 - Tiếp tục công việc từ điểm đã dừng.
+
+
+
+
+
+src/
+docs/
+tests/
+pyproject.toml
+Makefile
+README.md
+CLAUDE.md

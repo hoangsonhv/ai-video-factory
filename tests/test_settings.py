@@ -18,6 +18,12 @@ def test_defaults_are_applied() -> None:
     assert settings.database.url.startswith("sqlite:///")
 
 
+def test_prompt_root_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert Settings(_env_file=None).prompts.root == Path("prompts")
+    monkeypatch.setenv("AIVF_PROMPTS__ROOT", "custom/prompts")
+    assert load_settings().prompts.root == Path("custom/prompts")
+
+
 def test_provider_defaults() -> None:
     settings = Settings(_env_file=None)
     assert settings.provider.provider == "gemini"

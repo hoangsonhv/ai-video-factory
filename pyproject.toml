@@ -14,6 +14,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "google-genai>=1.0",
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +59,17 @@ addopts = "-q"
 pythonpath = ["src"]
 
 [dependency-groups]
+# The default group `uv run`/`uv sync` install. It must include the type
+# checker so `uv run mypy` runs in the same environment as the project's
+# dependencies (e.g. jinja2) and can resolve their official (py.typed) types.
 dev = [
+    "pytest>=8.2",
+    "mypy>=1.10",
     "ruff>=0.15.22",
+    "pre-commit>=3.7",
+    "types-jinja2>=2.11.9",
 ]
+
+[[tool.mypy.overrides]]
+module = ["jinja2.meta"]
+ignore_missing_imports = true

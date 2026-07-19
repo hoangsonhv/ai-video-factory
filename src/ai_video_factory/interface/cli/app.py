@@ -17,9 +17,11 @@ from ai_video_factory.errors import ConfigurationError
 from ai_video_factory.infrastructure.config.settings import LoggingSettings, load_settings
 from ai_video_factory.infrastructure.diagnostics import run_all_checks
 from ai_video_factory.infrastructure.logging.setup import configure_logging
+from ai_video_factory.interface.cli.prompt_commands import prompt_app
 from ai_video_factory.interface.presenters.diagnostics_presenter import render_diagnostics
 
 app = typer.Typer(add_completion=False, help="AI Video Factory command-line interface.")
+app.add_typer(prompt_app, name="prompt")
 _console = Console()
 _logger = logging.getLogger(__name__)
 

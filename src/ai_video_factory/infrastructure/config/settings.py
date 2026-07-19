@@ -79,6 +79,12 @@ class ProviderSettings(BaseModel):
         return value
 
 
+class PromptSettings(BaseModel):
+    """Prompt engine settings. ``root`` is the directory holding templates."""
+
+    root: Path = Path("prompts")
+
+
 class Settings(BaseSettings):
     """Root settings tree composed of the per-section models."""
 
@@ -94,6 +100,7 @@ class Settings(BaseSettings):
     database: DatabaseSettings = DatabaseSettings()
     logging: LoggingSettings = LoggingSettings()
     provider: ProviderSettings = ProviderSettings()
+    prompts: PromptSettings = PromptSettings()
 
 
 def load_settings() -> Settings:

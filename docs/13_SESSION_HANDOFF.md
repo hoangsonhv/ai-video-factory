@@ -18,56 +18,61 @@
 
 ## Current Handoff
 
-**Session date:** 2026-07-18
+**Session date:** 2026-07-19
 **Author:** Senior Python Engineer
-**Sprint:** 002 — AI Provider Layer (delivered)
+**Sprint:** 003 — Prompt Engine (delivered)
 **Version:** 0.1.0-dev
-**Branch:** `feat/sprint002-provider-layer`
+**Branch:** `feat/sprint003-prompt-engine`
 
 ### What was accomplished this session
-- Built the AI (LLM) provider layer — the single, vendor-neutral way the system talks to LLM providers (ADR-012):
-  - `infrastructure/providers/base/`: `LLMProvider` Protocol; `LLMRequest`/`LLMResponse`/`TokenUsage`/`RawCompletion`/`ProviderHealth`; `AIProviderError` hierarchy; `RetryPolicy`.
-  - `infrastructure/providers/gemini/`: `GeminiProvider` + `GeminiClient` seam over `google-genai` (SDK isolated + lazily imported).
-  - `infrastructure/providers/factory/`: `ProviderFactory.create()` (config-driven).
-  - `ProviderSettings` (provider/api_key/model/timeout/retry_count); `shared/health.HealthStatus`; `doctor` AI-provider check (OK/WARN/FAIL).
-- Verified: Ruff, MyPy (strict), Pytest (65, +35) all green; `ai-video-factory version`/`doctor` run. mypy caught a real bug (SDK `list()` is an async pager) — fixed.
+- Built the Prompt Engine (ADR-013), all in `infrastructure/prompts/`:
+  - `PromptLoader` (load + in-memory cache + `PromptNotFoundError`, path-traversal guarded), `PromptRenderer` (Jinja2, `StrictUndefined`), `PromptValidator` (exists + syntax + required variables), `PromptService` façade (`render`/`validate`/`list_prompts`/`load`).
+  - Error hierarchy `PromptError → PromptNotFoundError/PromptValidationError/PromptRenderError` (extends `InfrastructureError`).
+  - Templates under configurable root `prompts/` (`story/{idea,outline,chapter,scene}.md`, `image/image_prompt.md`) — no prompt text in Python.
+  - Config `PromptSettings.root`; CLI `prompt list/show/validate/render`.
+- Verified: Ruff, MyPy (strict), Pytest (91, +26) all green; all four `prompt` CLI examples run, including `render story/idea --var topic="Tu tiên" --var style="Trung Quốc"`.
+- Fixed a real bug: raw Unicode CLI output crashed on legacy Windows (cp1252) via Rich; raw text now written as UTF-8 bytes.
 
 ### Current in-flight work
-- None. Provider layer complete and verified.
+- None. Prompt engine complete and verified.
 
 ### Next Action (do this first)
-> Wait for the next Sprint specification from the Lead. Do NOT implement Story/Scene/Planner/Writer/Workflow/Video/Voice/Subtitle/Prompt-engine — all future sprints. A new LLM vendor is added by registering a builder in `ProviderFactory` + an adapter package, only when specified.
+> Wait for the next Sprint specification from the Lead. Do NOT implement Story/Scene/Image/Video/Workflow — future sprints. Those stages will consume the prompt engine via `PromptService` and an `LLMProvider` from `ProviderFactory`.
 
 ### Context needed to continue
-- **Provider layer:** the app talks to LLMs ONLY through `LLMProvider` (obtained from `ProviderFactory.create()`); it never names a vendor. Provider errors extend `AppError`. Retry is centralized (429/503/timeout); timeout via `asyncio.wait_for`.
-- **Testing a provider:** inject a fake client satisfying the `GeminiClient` protocol; drive async with `asyncio.run` (no `pytest-asyncio`, no real API calls).
-- **Config:** env `AIVF_PROVIDER__{PROVIDER,API_KEY,MODEL,TIMEOUT,RETRY_COUNT}`; `api_key` is `SecretStr`, blank → `None`.
-- **Tooling:** `uv`; `make lint/format/typecheck/test/doctor/run`. Console script is `ai-video-factory`.
+- **Prompt engine:** obtain via `PromptService.create(settings.prompts.root)`. Names are `/`-separated without `.md` (e.g. `story/idea`). Rendering is strict: a missing variable → `PromptRenderError`; bad template syntax → `PromptValidationError`.
+- **Shipped templates & their required vars:** `story/idea` → {style, topic}; `story/outline` → {idea, style, topic}; `story/chapter` → {chapter, outline, style, topic}; `story/scene` → {chapter, style}; `image/image_prompt` → {scene, style}.
+- **Config:** `AIVF_PROMPTS__ROOT` (default `prompts/`).
+- **CLI raw text:** goes through `render_text` (UTF-8 bytes) — do not route international prompt content through Rich's console encoder.
+- **Tooling:** `uv`; `make lint/format/typecheck/test`. Console script `ai-video-factory`.
 
 ### Decisions made this session
-- ADR-012 recorded: LLM abstraction lives in **infrastructure** (not domain), realizes ADR-005; vendor SDK isolated behind a typed client seam; resilience centralized; factory config-driven.
-- google-genai ships types, so it is type-checked (only `ignore_missing_imports` fallback kept); no `Any` leaks outward.
+- ADR-013 recorded: prompt engine in infrastructure; single **configurable** prompt root (default `prompts/`); Jinja2 with `StrictUndefined`; no prompt text in code. Supersedes the per-adapter location suggestion in `06_PROMPT_RULES.md` §1 (root is configurable, so that layout is still reachable).
 
 ### Open questions / risks for next session
-- `RealGeminiClient` live calls are not unit-tested by design (tests use a fake). Validate manually with a real key via `doctor` / `count_tokens`.
-- `google-genai` SDK surface (async pager, `usage_metadata` fields) was implemented to documented behavior; confirm against a live call when a key is available.
+- On a truly legacy cp1252 console (not UTF-8), rendered non-ASCII may display as mojibake though it no longer crashes; set the terminal to UTF-8 for correct display. Programmatic use (`PromptService.render`) always returns correct `str`.
 - import-linter still not wired as an automated gate.
 
 ### Files touched this session
-- New source: `infrastructure/providers/**` (base/gemini/factory), `shared/health.py`.
-- Modified source: `infrastructure/config/settings.py` (+`ProviderSettings`), `infrastructure/diagnostics.py` (tri-state + provider check), `interface/presenters/diagnostics_presenter.py`, `interface/cli/app.py`.
-- Config/tooling: `pyproject.toml` (+`google-genai`, mypy `google.*` override), `.env.example`, `uv.lock`.
-- Tests: `test_provider_models/errors/retry/gemini/factory.py` (new); `test_settings.py`, `test_diagnostics.py` (updated).
-- Docs: `04_DECISIONS.md` (ADR-012), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
+- New source: `infrastructure/prompts/**` (errors, models, loader, renderer, validator, service), `interface/cli/prompt_commands.py`, `interface/presenters/prompt_presenter.py`.
+- Modified source: `infrastructure/config/settings.py` (+`PromptSettings`), `interface/cli/app.py` (register `prompt` sub-app).
+- Templates: `prompts/story/*.md`, `prompts/image/image_prompt.md`.
+- Config/tooling: `pyproject.toml` (+`jinja2`), `.env.example`.
+- Tests: `test_prompt_loader/renderer/validator/service/cli.py` (new); `test_settings.py` (updated).
+- Docs: `04_DECISIONS.md` (ADR-013), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
 
 ### Do NOT do
 - Do not add a Web UI, FastAPI, or Docker (ADR-001, ADR-004; non-goals).
 - Do not put I/O or vendor code in `domain/`.
-- Do not implement any pipeline stage, prompt engine, or workflow — those are future sprints.
+- Do not implement Story/Scene/Image/Video/Workflow — those are future sprints.
 
 ---
 
 ## Handoff History (rolling, newest first)
+
+### 2026-07-19 — Sprint 003 Prompt Engine delivered
+- Built loader/renderer(Jinja2)/validator/service + templates under configurable `prompts/`; CLI `prompt list/show/validate/render`; UTF-8-safe output. 91 tests green; ADR-013 recorded.
+- Handed off to: next Sprint spec (no future stages implemented).
 
 ### 2026-07-18 — Sprint 002 AI Provider Layer delivered
 - Built LLM provider abstraction (Protocol, models, error hierarchy, retry, timeout), `GeminiProvider` over `google-genai` (isolated behind a client seam), `ProviderFactory`, provider config, and a `doctor` AI-provider health check. 65 tests green; ADR-012 recorded.

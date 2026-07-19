@@ -13,6 +13,13 @@
 ## [Unreleased]
 
 ### Added
+- **Sprint 003 — Prompt Engine (ADR-013):**
+  - `infrastructure/prompts/`: `PromptLoader` (load + cache + `PromptNotFoundError`), `PromptRenderer` (Jinja2, `StrictUndefined`), `PromptValidator` (exists + syntax + required variables), `PromptService` (`render`, `validate`, `list_prompts`).
+  - Prompt error hierarchy: `PromptError → PromptNotFoundError`, `PromptValidationError`, `PromptRenderError`.
+  - Prompt templates under the configurable root `prompts/`: `story/idea.md`, `story/outline.md`, `story/chapter.md`, `story/scene.md`, `image/image_prompt.md` — no prompt text in Python.
+  - Configuration: `PromptSettings.root` (default `prompts/`, env `AIVF_PROMPTS__ROOT`); `jinja2` runtime dependency.
+  - CLI: `factory prompt list`, `prompt show <name>`, `prompt validate`, `prompt render <name> --var k=v` (UTF-8-safe raw output).
+  - 26 new tests (loader, renderer, validator, service incl. shipped templates, CLI).
 - **Sprint 002 — AI Provider Layer:** the single, vendor-neutral way the system talks to LLM providers (ADR-012).
   - `LLMProvider` Protocol (`generate`, `health_check`, `count_tokens`, `models`) with strongly typed `LLMRequest`, `LLMResponse`, `TokenUsage`, `RawCompletion`, `ProviderHealth`.
   - Provider error hierarchy: `AIProviderError` → `AuthenticationError`, `RateLimitError`, `TimeoutError`, `ProviderUnavailableError`, `InvalidResponseError` (extends the existing `ProviderError` tree).
@@ -62,6 +69,9 @@
 
 ### Removed
 - Runtime artifacts removed from the working tree (`__pycache__`, `*.pyc`, `*.db`, `*.sqlite`, log files); the `logs/`, `output/`, and `data/` folders are preserved via `.gitkeep`.
+
+### Fixed
+- CLI raw text output (`prompt show`/`prompt render`) no longer crashes on legacy Windows (cp1252) consoles when the content contains non-ASCII characters (e.g. Vietnamese, Chinese); it is now written as UTF-8 bytes.
 
 ### Security
 - Established the invariant that secrets are handled as `SecretStr`, never logged or persisted, with an active redaction filter (ADR-008, ADR-010).
