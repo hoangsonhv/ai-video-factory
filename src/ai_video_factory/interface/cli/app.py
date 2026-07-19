@@ -24,6 +24,7 @@ from ai_video_factory.interface.cli.image_commands import image_command
 from ai_video_factory.interface.cli.image_prompt_commands import image_prompt_command
 from ai_video_factory.interface.cli.outline_commands import outline_command
 from ai_video_factory.interface.cli.prompt_commands import prompt_app
+from ai_video_factory.interface.cli.tts_commands import tts_command
 from ai_video_factory.interface.presenters.diagnostics_presenter import render_diagnostics
 
 app = typer.Typer(add_completion=False, help="AI Video Factory command-line interface.")
@@ -34,6 +35,7 @@ app.command("outline")(outline_command)
 app.command("chapter")(chapter_command)
 app.command("image-prompt")(image_prompt_command)
 app.command("image")(image_command)
+app.command("tts")(tts_command)
 _console = Console()
 _logger = logging.getLogger(__name__)
 

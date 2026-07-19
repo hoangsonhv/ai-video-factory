@@ -219,6 +219,19 @@
 - **Consequences:** The end-to-end story chain is now one command. Testable with a single stage-aware fake provider (keyed on `request.metadata["stage"]`). Later phases (image generation, then media) extend by appending stages.
 - **Alternatives considered:** Putting the runner in `application` (rejected — would import infrastructure generators, violating the inward rule; the generators are already infrastructure per ADR-014); the CLI orchestrating directly (rejected — keeps orchestration out of the thin delivery layer and untestable without the CLI); introducing generator Protocols now to host the runner in application (rejected — a redesign the sprint forbids).
 
+### ADR-020 — Speech (TTS) Provider Layer (mirrors the image layer; WAV under `.mp3`)
+- **Status:** Accepted
+- **Date:** 2026-07-19
+- **Context:** Sprint 010 adds Vietnamese narration synthesis from `chapter.json`, parallel to the image provider layer (ADR-018) but for audio.
+- **Decision:**
+  1. `SpeechProvider` **Protocol** (`synthesize`, `health_check`, `list_voices`) in `infrastructure/providers/speech/base/`, with `SpeechSynthesisRequest` / `SpeechSynthesisResponse` and an internal `SynthesizedAudio`. Lives in **infrastructure** (like the other provider layers).
+  2. **Reuses** the shared `AIProviderError` hierarchy, `RetryPolicy`, `ProviderHealth`, `HealthStatus`, and google-genai `map_status_to_error` — no duplication.
+  3. `GeminiSpeechProvider` (google-genai TTS) isolates the SDK behind a `GeminiTtsClient` seam (lazily imported); it saves the audio via an injected `AudioStorage` and returns the path, duration, and sample rate. Retries transient errors once; timeout via `asyncio.wait_for`.
+  4. **Format:** Gemini TTS returns raw PCM (16-bit mono, 24 kHz). MP3 transcoding requires ffmpeg, which is out of scope, so the PCM is wrapped into a valid **WAV** container (pure-Python `wave`) and saved under the spec's `output/audio/narration.mp3` path; `metadata.json` records the true `sample_rate`. A future media/transcode stage can produce real MP3.
+  5. `SpeechProviderFactory.create(settings, storage)` selects the provider from config; if the speech API key is unset it reuses the LLM key. `SpeechProviderSettings` (`provider`, `api_key`, `model`, `voice`, `timeout`, `retry_count`). Delivery: `ai-video-factory tts --chapter <chapter.json>` with a Rich spinner; saves `output/audio/narration.mp3` + `output/audio/metadata.json` (duration, voice, provider, sample_rate).
+- **Consequences:** Narration synthesis is provider-agnostic and testable with a fake `GeminiTtsClient`/`SpeechProvider` (no real API). Reuses `read_chapter`. No image/subtitle/ffmpeg/workflow changes.
+- **Alternatives considered:** Bundling an MP3 encoder like `lameenc` (rejected — heavy native dependency for one stage; WAV suffices until a media stage exists); a single provider abstraction for image + speech (rejected — ISP, different request/response shapes); the provider returning raw bytes for the caller to save (rejected — `audio_path` in the response implies the provider saves; injecting `AudioStorage` keeps it testable).
+
 ---
 
 ### Index
@@ -244,3 +257,4 @@
 | 017 | Image prompt generator | Accepted |
 | 018 | Image provider layer | Accepted |
 | 019 | Pipeline runner (Phase 1) | Accepted |
+| 020 | Speech (TTS) provider layer | Accepted |
