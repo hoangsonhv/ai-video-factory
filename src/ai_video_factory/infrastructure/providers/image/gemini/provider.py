@@ -87,6 +87,16 @@ class GeminiImagenProvider:
     async def models(self) -> list[str]:
         return await self._require_client().list_models()
 
+    async def probe_generation(self, request: ImageGenerationRequest) -> None:
+        """Diagnostic single-shot generation: one call, no retry, no save.
+
+        Bypasses the rate limiter and storage so ``doctor --image`` can surface
+        the raw first-request quota/HTTP-429 response without the backoff loop.
+        The generation logic itself (client call) is unchanged.
+        """
+        client = self._require_client()
+        await client.generate(request, model=self._model)
+
     async def _call(self, client: ImagenClient, request: ImageGenerationRequest) -> bytes:
         try:
             return await asyncio.wait_for(

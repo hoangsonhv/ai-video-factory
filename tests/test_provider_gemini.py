@@ -90,7 +90,7 @@ def test_generate_maps_completion_to_response() -> None:
     assert response.content == "a story"
     assert response.finish_reason == "STOP"
     assert response.provider == "gemini"
-    assert response.model == "gemini-2.0-flash"
+    assert response.model == "gemini-3.5-flash"
     assert response.latency == pytest.approx(0.5)
     assert response.usage.total_tokens == 15
 

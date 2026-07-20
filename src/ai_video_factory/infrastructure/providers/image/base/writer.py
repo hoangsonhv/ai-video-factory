@@ -3,25 +3,32 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
-from ai_video_factory.infrastructure.providers.image.base.models import ImageGenerationResponse
+from pydantic import BaseModel, ConfigDict
 
 
-def write_images_manifest(path: Path, responses: list[ImageGenerationResponse]) -> None:
-    """Write a manifest of the generated images as UTF-8 JSON."""
+class ImageManifestEntry(BaseModel):
+    """One image described in ``output/images/manifest.json``."""
+
+    model_config = ConfigDict(frozen=True)
+
+    index: int
+    filename: str
+    prompt: str
+    provider: str
+    model: str
+    width: int
+    height: int
+    created_at: str
+
+
+def write_images_manifest(path: Path, entries: Sequence[ImageManifestEntry]) -> None:
+    """Write the image manifest as UTF-8 JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "count": len(responses),
-        "images": [
-            {
-                "index": index,
-                "path": str(response.image_path),
-                "provider": response.provider,
-                "model": response.model,
-                "generation_time": response.generation_time,
-            }
-            for index, response in enumerate(responses, start=1)
-        ],
+        "count": len(entries),
+        "images": [entry.model_dump() for entry in entries],
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

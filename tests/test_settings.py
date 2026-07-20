@@ -28,7 +28,7 @@ def test_provider_defaults() -> None:
     settings = Settings(_env_file=None)
     assert settings.provider.provider == "gemini"
     assert settings.provider.api_key is None
-    assert settings.provider.model == "gemini-2.0-flash"
+    assert settings.provider.model == "gemini-3.5-flash"
     assert settings.provider.timeout == 30.0
     assert settings.provider.retry_count == 3
 
@@ -40,9 +40,27 @@ def test_speech_provider_defaults_retry_three_times() -> None:
     assert speech.retry_count == 3
 
 
+def test_video_defaults() -> None:
+    video = Settings(_env_file=None).video
+    assert video.width == 1080
+    assert video.height == 1920
+    assert video.fps == 30
+    assert video.retry_count == 1
+    assert video.video_codec == "libx264"
+    assert video.audio_codec == "aac"
+
+
+def test_transcription_provider_defaults() -> None:
+    transcription = Settings(_env_file=None).transcription_provider
+    assert transcription.provider == "gemini_transcription"
+    assert transcription.language == "vi"
+    assert transcription.retry_count == 3
+
+
 def test_image_provider_defaults_retry_three_times() -> None:
     image = Settings(_env_file=None).image_provider
-    assert image.provider == "gemini_imagen"
+    assert image.provider == "pollinations"  # free, key-less MVP default (Sprint 013)
+    assert image.model == "flux"
     assert image.retry_count == 3
 
 

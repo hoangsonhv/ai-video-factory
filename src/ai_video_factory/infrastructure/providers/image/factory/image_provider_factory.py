@@ -15,12 +15,18 @@ from ai_video_factory.infrastructure.config.settings import ImageProviderSetting
 from ai_video_factory.infrastructure.media.image_storage import ImageStorage
 from ai_video_factory.infrastructure.providers.image.base.provider import ImageProvider
 from ai_video_factory.infrastructure.providers.image.gemini.provider import GeminiImagenProvider
+from ai_video_factory.infrastructure.providers.image.pollinations.provider import (
+    PollinationsImageProvider,
+)
 
 _ImageBuilder = Callable[
     [ImageProviderSettings, ImageStorage, Callable[[str], None] | None], ImageProvider
 ]
 
 _BUILDERS: dict[str, _ImageBuilder] = {
+    "pollinations": lambda image_settings, storage, on_rate_limit: PollinationsImageProvider(
+        image_settings, storage, on_rate_limit=on_rate_limit
+    ),
     "gemini_imagen": lambda image_settings, storage, on_rate_limit: GeminiImagenProvider(
         image_settings, storage, on_rate_limit=on_rate_limit
     ),

@@ -18,63 +18,90 @@
 
 ## Current Handoff
 
-**Session date:** 2026-07-19
+**Session date:** 2026-07-20
 **Author:** Senior Python Engineer
-**Sprint:** 012 — Implement Image Generation (image hardening) (delivered)
+**Sprint:** 017 — Video Composer (delivered)
 **Version:** 0.1.0-dev
-**Branch:** `feat/sprint012-image-generation`
+**Branch:** `feat/sprint017-video-composer`
 
 ### What was accomplished this session
-- Enhanced the existing Sprint-008 `image` command (reused `ImageProvider`; no refactor). Four additions:
-  - **Filenames:** images now saved as `001.png`, `002.png`, … `ImageStorage` gained backward-compatible empty-prefix support; the default `image` prefix is unchanged, so the asset pipeline still produces `image_001.png`.
-  - **Manifest:** writes `output/images/manifest.json` (count + per-image index/path/provider/model/generation_time) via new `providers/image/base/writer.write_images_manifest`.
-  - **Retry ×3:** `ImageProviderSettings.retry_count` default 1 → **3** (settings + `.env.example`).
-  - **`--force` / skip:** `image` now skips (exit 0, "Skipped …") when `output/images/001.png` already exists, unless `--force` is passed.
-- Everything else unchanged: input `--input`, Rich progress bar, `ImageProviderFactory` seam.
-- Verified: Ruff, MyPy (strict), Pytest (241, +4) all green; skip, `--force`, and `--help` verified live.
+- New self-contained **`infrastructure/video/`** package (ffmpeg-only): pure `build_ffmpeg_command()` (argv generator), `parse_srt_cues()` (subtitle timing), `FfmpegVideoComposer` (**satisfies the existing `VideoComposer` protocol** in `asset_pipeline/generators.py` — no new port, no factory), `write_video_metadata`.
+- Composition: 1080x1920/30fps/H.264/AAC; one image per subtitle cue, **reuse last image** when images < cues; per-image Ken Burns `zoompan`; `xfade` crossfades (cumulative offsets); burned subtitles (`subtitles` filter, Windows-escaped path); narration audio `-shortest`. Ken Burns constants live in `ffmpeg_command.py`; encoding params in `VideoSettings`.
+- Robust exec: subprocess off the event loop (`asyncio.to_thread`, **injectable runner** — mocked in tests); **retry once** on non-zero → `MediaError`; missing binary → `MediaError`. The CLI **verifies ffmpeg with the existing `check_ffmpeg()`** before composing and prints a clear install message if absent.
+- CLI `compose --images --audio --subtitle` registered in `app.py`: reads assets only (never regenerates), writes `output/video/final.mp4` + `metadata.json`.
+- ADR-024 recorded; `VideoSettings` + `.env.example` video section added.
+- Tests: 26 new (command gen, srt timing, composer retry/missing-ffmpeg/reuse-last/errors, CLI, settings) — **ffmpeg fully mocked**. 353 pass.
+- ffmpeg is **not installed** on this machine (expected) → `compose` exits 1 with a friendly "install FFmpeg" message (verified). Operator will install ffmpeg and run the live compose.
 
 ### Current in-flight work
-- None. image hardening complete and verified.
+- None. Sprint 017 complete; live ffmpeg render pending the operator's local ffmpeg install.
 
 ### Next Action (do this first)
 > Wait for the next Sprint specification from the Lead. The **subtitle** stage and the **video composition** stage (needs ffmpeg) plug into the asset pipeline by implementing `SubtitleGenerator` / `VideoComposer` and injecting them into `AssetPipelineRunner`. Do NOT build them until specified.
 
 ### Context needed to continue
+- **Default image provider is now `pollinations`** (`AIVF_IMAGE_PROVIDER__PROVIDER`, model `flux`) — free, no key. Switch to Gemini with `AIVF_IMAGE_PROVIDER__PROVIDER=gemini_imagen` + a key + a Gemini image model. Both go through `ImageProviderFactory` (drivers: `pollinations`, `gemini_imagen`).
+- **Pollinations provider:** `providers/image/pollinations/{client,provider}.py`. `RealPollinationsClient` does `GET image.pollinations.ai/prompt/{prompt}?model&width&height&seed&nologo` (returns image bytes) and `GET /models`. Tested with httpx `MockTransport` (no network). No key needed → always builds a live client (no WARN-no-key path).
 - **`image` flow (now):** if `output/images/001.png` exists and no `--force` → skip. Else `read_image_prompts` → `ImageProviderFactory.create` (storage uses `prefix=""` → `001.png`) → per-prompt `generate` (retries transient errors 3×) with a progress bar → `write_images_manifest` → `manifest.json` + summary.
-- **Image retry is now 3** by default (`AIVF_IMAGE_PROVIDER__RETRY_COUNT`); this also applies to the asset pipeline's image generator.
+- **Image retry is 3** by default (`AIVF_IMAGE_PROVIDER__RETRY_COUNT`); this also applies to the asset pipeline's image generator.
 - **`ImageStorage` prefix:** default `"image"` (→ `image_001.png`, used by the asset pipeline) vs `""` (→ `001.png`, used only by the `image` CLI). Do not change the default — the asset-pipeline test asserts `image_001.png`.
-- **`tts` flow:** if `output/audio/narration.mp3` exists and no `--force` → skip. Else `read_chapter` → `SpeechProviderFactory.create` → `synthesize` (retries 3×) → save + `metadata.json`.
-- **Speech retry is now 3** by default (`AIVF_SPEECH_PROVIDER__RETRY_COUNT`); this also applies to the asset pipeline's `SpeechAssetGenerator`.
-- **Two orchestrators:** `PipelineRunner` (story phase) and `AssetPipelineRunner` (media phase; images/voice ready, subtitle/video pending).
-- **To add subtitle/video:** implement the `SubtitleGenerator`/`VideoComposer` Protocol (returning `AssetResult`), add it in `AssetPipelineRunner.from_settings`, and its stage flips to "ready".
+- **`tts` flow:** `tts --input output/chapter.json` (alias `--chapter`). If `output/audio/narration.mp3` exists and no `--force` → skip. Else `read_chapter` → `SpeechProviderFactory.create` → `synthesize` (retries 3×) → save + `metadata.json`. `_ensure_utf8_stdout()` runs first (legacy-Windows cp1252 safety for the spinner + Vietnamese text).
+- **Speech retry is 3** by default (`AIVF_SPEECH_PROVIDER__RETRY_COUNT`); this also applies to the asset pipeline's `SpeechAssetGenerator`.
+- **`subtitle` flow:** `subtitle --audio output/audio/narration.mp3 --chapter output/chapter.json` (default `--language vi`). If `output/subtitles/narration.srt` exists and no `--force` → skip. Else check audio exists → `read_chapter` (reference text) → `TranscriptionProviderFactory.create` → `transcribe` (retries 3×) → `to_srt` → `SubtitleStorage.save` (UTF-8). Provider returns segments; the CLI writes the `.srt`.
+- **Transcription provider:** `providers/transcription/` — driver `gemini_transcription`, default model **`gemini-flash-latest`** (audio-capable; `gemini-2.5-flash` 404s "not available to new users" on this key), retry 3 (`AIVF_TRANSCRIPTION_PROVIDER__RETRY_COUNT`), api-key falls back to the LLM key. Timing = Gemini ASR timestamps (best-effort; drifts somewhat).
+- **`compose` flow:** `compose --images output/images --audio output/audio/narration.mp3 --subtitle output/subtitles/narration.srt`. Verifies ffmpeg via `check_ffmpeg()` (exit 1 + install message if absent) → validates inputs exist → `FfmpegVideoComposer(settings.video, output/video/final.mp4)` → `compose_video` builds argv (`build_ffmpeg_command`), runs off-loop with retry-once → `write_video_metadata` (`final.mp4` + `metadata.json`). Reads assets only; never regenerates.
+- **Video composer:** `infrastructure/video/` — `FfmpegVideoComposer` implements the existing `VideoComposer` protocol; **injectable runner** (`default_ffmpeg_runner`) so tests mock ffmpeg. `VideoSettings` (`AIVF_VIDEO__*`): 1080x1920, 30fps, libx264/aac, fade 0.5s, retry_count 1. **ffmpeg must be on PATH** for a real render (not installed on this machine).
+- **Two orchestrators:** `PipelineRunner` (story phase) and `AssetPipelineRunner` (media phase; images/voice ready, subtitle/video pending — the standalone `subtitle`/`compose` CLIs are separate from the asset pipeline's `SubtitleGenerator`/`VideoComposer` contracts, still unwired).
+- **To wire video into the pipeline (future):** inject `FfmpegVideoComposer` into `AssetPipelineRunner` for the `compose_video` stage (it already satisfies the `VideoComposer` protocol) — no new adapter needed.
 - **Testing:** inject a fake `GeminiTtsClient`/`SpeechProvider`; `asyncio.run`; no real API. The skip test needs no mock (skip returns before building the provider).
 - **Tooling:** `uv`; `make lint/format/typecheck/test`. Console script `ai-video-factory`.
 
 ### Decisions made this session
-- No new ADR — this is a small, spec-scoped hardening of the existing `image` command. Recorded as Sprint 012 (the Lead's label; delivered after Sprint 013, non-linear numbering).
-- Kept `ImageStorage`'s default prefix so the asset pipeline is untouched; only the `image` CLI opts into `prefix=""` → `001.png` (satisfies "do not modify unrelated modules").
-- Whole-run skip keyed on `001.png` (matching the `tts` skip precedent), since the provider's `ImageStorage` auto-numbers and per-image skip would conflict.
+- Added ADR-024 — an **ffmpeg VideoComposer** that satisfies the existing `VideoComposer` protocol (no new port, no factory — a single ffmpeg backend, avoiding a placeholder abstraction). Command generation is a **pure** function (unit-tested without ffmpeg); the subprocess runner is injectable (mocked in tests).
+- Verified ffmpeg with the existing `check_ffmpeg()` diagnostics before composing; missing ffmpeg → clear message + exit 1 (and `MediaError` at the runner level).
+- Kept the video package self-contained in `infrastructure/video/`; did not touch the asset pipeline or any other provider (respecting "do not refactor unrelated modules").
 
 ### Open questions / risks for next session
-- The skip check keys on the fixed path `output/images/001.png`; if a configurable filename is ever needed, thread it through `ImageStorage`.
-- Live Gemini Imagen/TTS calls remain unexercised by tests (fake providers only).
-- import-linter still not wired as an automated gate.
+- **Live ffmpeg render not yet run** — ffmpeg isn't installed on this machine (expected). The operator will install it and run `compose`. The filter graph (zoompan + xfade offsets + subtitles path escaping) may need small tuning once validated against real ffmpeg output.
+- Crossfades overlap subtitle cue windows slightly (small fades) → minor timing approximation; `-shortest` trims video to the narration.
+- The `default_ffmpeg_runner` real subprocess path is exercised only via the missing-binary case; a fixture-based integration test needs ffmpeg (per ai-tool.md testing strategy).
 
 ### Files touched this session
-- Modified source: `infrastructure/config/settings.py` (image `retry_count` 1→3), `infrastructure/media/image_storage.py` (empty-prefix support), `interface/cli/image_commands.py` (`--force` + skip + `prefix=""` + manifest).
-- New source: `infrastructure/providers/image/base/writer.py` (`write_images_manifest`).
-- Config: `.env.example` (`AIVF_IMAGE_PROVIDER__RETRY_COUNT` 1→3).
-- Tests: `test_image_cli.py` (→`001.png` + manifest, +skip / +force), `test_image_storage.py` (+empty-prefix), `test_settings.py` (+image defaults).
-- Docs: `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) and ADRs untouched.
+- New source: `infrastructure/video/{__init__,srt_timing,ffmpeg_command,ffmpeg_composer,writer}.py`, `interface/cli/compose_commands.py`, `interface/presenters/video_presenter.py`.
+- Modified source: `config/settings.py` (+`VideoSettings`, wired into `Settings`), `interface/cli/app.py` (register `compose`).
+- Config: `.env.example` (+video section).
+- Tests: new `test_ffmpeg_command.py`, `test_srt_timing.py`, `test_ffmpeg_composer.py`, `test_compose_cli.py`; `test_settings.py` (+video defaults).
+- Docs: `04_DECISIONS.md` (ADR-024), `12_PROJECT_STATE.md`, `13_SESSION_HANDOFF.md`, `CHANGELOG.md`. Architecture doc (`ai-tool.md`) untouched.
+- Also this session (separate ask): fixed the two long-standing LLM-default test assertions (`gemini-2.0-flash` → `gemini-3.5-flash`) — suite is fully green.
 
 ### Do NOT do
 - Do not add a Web UI, FastAPI, or Docker (ADR-001, ADR-004; non-goals).
 - Do not put I/O or vendor code in `domain/`.
-- Do not implement subtitle generation, ffmpeg/video composition, or upload — future sprints.
+- Do not regenerate images/audio/subtitles; do not implement upload — future sprints.
 
 ---
 
 ## Handoff History (rolling, newest first)
+
+### 2026-07-20 — Sprint 017 Video Composer delivered
+- New `infrastructure/video/` (ffmpeg-only, ADR-024): pure `build_ffmpeg_command`, `parse_srt_cues`, `FfmpegVideoComposer` (implements the existing `VideoComposer` protocol), `compose` CLI → `output/video/final.mp4` + `metadata.json`. 1080x1920/H.264/AAC, Ken Burns + crossfades + burned subtitles, reuse-last-image, retry-once, ffmpeg verified via `check_ffmpeg()`. 353 tests pass (ffmpeg mocked); live render pending an ffmpeg install.
+- Handed off to: next Sprint spec (upload/pipeline wiring when specified).
+
+### 2026-07-20 — Sprint 016 Subtitle Generation delivered
+- New transcription provider layer (port + Gemini driver + factory + settings, ADR-023) + `subtitle` CLI → UTF-8 Vietnamese `output/subtitles/narration.srt`, timed to the narration; retry ×3, skip-unless-`--force`. `to_srt` formatter + `SubtitleStorage`. 325 tests pass; verified live (21-cue SubRip).
+- Handed off to: next Sprint spec (video composition / ffmpeg when specified).
+
+### 2026-07-20 — Sprint 015 Voice Generation delivered
+- `tts` primary flag → `--input` (`--chapter` alias); reuses `SpeechProvider`, Vietnamese default, retry ×3, skip-unless-`--force`. Fixed a legacy-Windows cp1252 crash (Braille spinner) that was dropping `metadata.json` after saving `narration.mp3` — stdout now switched to UTF-8. 295 tests pass; verified live (66.7s narration, both files written).
+- Handed off to: next Sprint spec (subtitle/video stages when specified).
+
+### 2026-07-20 — Sprint 014 Generate Real Images delivered
+- `image` command: per-file skip, continue-on-failure, generated/skipped/failed summary, richer manifest (`filename/prompt/width/height/created_at`) with dimensions parsed from image bytes. Provider/storage untouched (work-dir + atomic rename). 294 tests pass; verified live (6 skipped, real dims).
+- Handed off to: next Sprint spec (subtitle/video stages when specified).
+
+### 2026-07-20 — Sprint 013 Pollinations Image Provider delivered
+- New free, key-less `PollinationsImageProvider` behind the existing `ImageProvider` port (httpx client seam); registered as the `pollinations` driver and made the **default** (model `flux`). Gemini Imagen unchanged/selectable. ADR-022. 287 tests pass; 6 images generated live for free.
+- Handed off to: next Sprint spec (subtitle/video stages when specified).
 
 ### 2026-07-19 — Sprint 012 Implement Image Generation (image hardening) delivered
 - Enhanced the existing `image`: `001.png` naming (empty-prefix `ImageStorage`), `manifest.json`, image retry default 1→3, and `--force`/skip-if-`001.png`-exists. Reused `ImageProvider`, no refactor. 241 tests green; no new ADR.

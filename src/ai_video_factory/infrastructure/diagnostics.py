@@ -19,7 +19,18 @@ from pydantic import BaseModel, ConfigDict
 
 from ai_video_factory.errors import ConfigurationError, PersistenceError
 from ai_video_factory.infrastructure.config.settings import Settings, load_settings
+from ai_video_factory.infrastructure.media.image_storage import ImageStorage
+from ai_video_factory.infrastructure.providers.base.errors import (
+    AIProviderError,
+    AuthenticationError,
+    RateLimitError,
+)
 from ai_video_factory.infrastructure.providers.factory.provider_factory import ProviderFactory
+from ai_video_factory.infrastructure.providers.image.base.models import ImageGenerationRequest
+from ai_video_factory.infrastructure.providers.image.base.provider import ImageProvider
+from ai_video_factory.infrastructure.providers.image.factory.image_provider_factory import (
+    ImageProviderFactory,
+)
 from ai_video_factory.shared.health import HealthStatus
 
 MIN_PYTHON: tuple[int, int] = (3, 13)
@@ -119,6 +130,115 @@ def check_ai_provider(settings: Settings) -> CheckResult:
         status=health.status,
         detail=f"{settings.provider.provider}: {health.detail}",
     )
+
+
+def _model_in(configured: str, available: list[str]) -> bool:
+    """True if the configured model matches an available id (with/without prefix)."""
+    candidates = {configured, f"models/{configured}"}
+    stripped = {name.removeprefix("models/") for name in available}
+    return bool(candidates & set(available)) or configured in stripped
+
+
+def _quota_result(error: AIProviderError | None) -> CheckResult:
+    """Turn the outcome of the quota probe into a check result.
+
+    A rate limit / quota response is a WARN, not a FAIL: it is an account or
+    billing condition (often a free-tier ``limit: 0`` for image generation),
+    not a broken setup, so it is surfaced prominently without making the
+    diagnostic command itself exit non-zero.
+    """
+    if error is None:
+        return CheckResult(
+            name="Quota response",
+            status=HealthStatus.OK,
+            detail="generation succeeded (quota available)",
+        )
+    if isinstance(error, RateLimitError):
+        detail = str(error.context.get("detail", error))
+        retry = f"; Retry-After={error.retry_after:.0f}s" if error.retry_after else ""
+        return CheckResult(
+            name="Quota response",
+            status=HealthStatus.WARN,
+            detail=f"HTTP 429 quota exceeded{retry} :: {detail}",
+        )
+    return CheckResult(name="Quota response", status=HealthStatus.WARN, detail=str(error))
+
+
+async def _live_image_checks(provider: ImageProvider, configured_model: str) -> list[CheckResult]:
+    """Contact the image API once (single event loop): list models, then probe.
+
+    Both async calls share one loop because the vendor client binds its HTTP
+    transport to the loop it is first used in; separate ``asyncio.run`` calls
+    would reuse a closed loop.
+    """
+    try:
+        available = await provider.models()
+    except AuthenticationError as exc:
+        return [CheckResult(name="Authentication", status=HealthStatus.FAIL, detail=str(exc))]
+    except AIProviderError as exc:
+        return [CheckResult(name="Image API available", status=HealthStatus.FAIL, detail=str(exc))]
+
+    exists = _model_in(configured_model, available)
+    results = [
+        CheckResult(name="Authentication", status=HealthStatus.OK, detail="key accepted"),
+        CheckResult(
+            name="Image API available",
+            status=HealthStatus.OK,
+            detail=f"reachable ({len(available)} models)",
+        ),
+        CheckResult(
+            name="Model exists",
+            status=HealthStatus.OK if exists else HealthStatus.FAIL,
+            detail=configured_model if exists else f"{configured_model} not in available models",
+        ),
+    ]
+
+    quota_error: AIProviderError | None = None
+    request = ImageGenerationRequest(prompt="diagnostic probe", aspect_ratio="1:1")
+    try:
+        await provider.probe_generation(request)
+    except AIProviderError as exc:
+        quota_error = exc
+    results.append(_quota_result(quota_error))
+    return results
+
+
+def run_image_checks() -> list[CheckResult]:
+    """Run image-provider diagnostics for ``doctor --image``.
+
+    Reports the configured model, provider, region, authentication, whether the
+    image API is reachable, whether the model exists, and — when a key is
+    configured — a live quota probe (a single generation request).
+    """
+    config_result, settings = check_config_loading()
+    results = [config_result]
+    if settings is None:
+        return results
+
+    image = settings.image_provider
+    results.append(
+        CheckResult(name="Image provider", status=HealthStatus.OK, detail=image.provider)
+    )
+    results.append(CheckResult(name="Configured model", status=HealthStatus.OK, detail=image.model))
+    results.append(
+        CheckResult(name="Region", status=HealthStatus.OK, detail="global (Gemini Developer API)")
+    )
+
+    has_key = image.api_key is not None or settings.provider.api_key is not None
+    if not has_key:
+        results.append(
+            CheckResult(
+                name="Authentication",
+                status=HealthStatus.WARN,
+                detail="no API key configured (set AIVF_IMAGE_PROVIDER__API_KEY)",
+            )
+        )
+        return results
+
+    storage = ImageStorage(settings.app.output_dir / "images")
+    provider = ImageProviderFactory.create(settings, storage)
+    results.extend(asyncio.run(_live_image_checks(provider, image.model)))
+    return results
 
 
 def run_all_checks() -> list[CheckResult]:

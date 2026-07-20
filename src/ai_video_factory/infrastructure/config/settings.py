@@ -81,11 +81,14 @@ class ProviderSettings(BaseModel):
 
 class ImageProviderSettings(BaseModel):
     """Image (AI) provider settings. The active provider is chosen by
-    ``provider``; if ``api_key`` is unset the LLM provider's key is used."""
+    ``provider``; if ``api_key`` is unset the LLM provider's key is used.
 
-    provider: str = "gemini_imagen"
+    Defaults to the free, key-less ``pollinations`` provider for the MVP;
+    set ``provider=gemini_imagen`` (with a key) to use Google Imagen instead."""
+
+    provider: str = "pollinations"
     api_key: SecretStr | None = None
-    model: str = "gemini-3.1-flash-image"
+    model: str = "flux"
     timeout: float = Field(default=60.0, gt=0.0)
     retry_count: int = Field(default=3, ge=0)
 
@@ -116,6 +119,39 @@ class SpeechProviderSettings(BaseModel):
         return value
 
 
+class TranscriptionProviderSettings(BaseModel):
+    """Transcription (speech-to-text) provider settings. The active provider is
+    chosen by ``provider``; if ``api_key`` is unset the LLM provider's key is
+    used. Used to align subtitles to the narration audio."""
+
+    provider: str = "gemini_transcription"
+    api_key: SecretStr | None = None
+    model: str = "gemini-flash-latest"
+    language: str = "vi"
+    timeout: float = Field(default=120.0, gt=0.0)
+    retry_count: int = Field(default=3, ge=0)
+
+    @field_validator("api_key", mode="before")
+    @classmethod
+    def _blank_key_is_none(cls, value: object) -> object | None:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
+
+class VideoSettings(BaseModel):
+    """Final video composition settings (ffmpeg). Portrait TikTok defaults."""
+
+    ffmpeg_path: str = "ffmpeg"
+    width: int = Field(default=1080, gt=0)
+    height: int = Field(default=1920, gt=0)
+    fps: int = Field(default=30, gt=0)
+    fade_duration: float = Field(default=0.5, ge=0.0)
+    video_codec: str = "libx264"
+    audio_codec: str = "aac"
+    retry_count: int = Field(default=1, ge=0)
+
+
 class PromptSettings(BaseModel):
     """Prompt engine settings. ``root`` is the directory holding templates."""
 
@@ -139,6 +175,8 @@ class Settings(BaseSettings):
     provider: ProviderSettings = ProviderSettings()
     image_provider: ImageProviderSettings = ImageProviderSettings()
     speech_provider: SpeechProviderSettings = SpeechProviderSettings()
+    transcription_provider: TranscriptionProviderSettings = TranscriptionProviderSettings()
+    video: VideoSettings = VideoSettings()
     prompts: PromptSettings = PromptSettings()
 
 

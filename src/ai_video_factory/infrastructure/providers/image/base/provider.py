@@ -34,3 +34,11 @@ class ImageProvider(Protocol):
     async def models(self) -> list[str]:
         """Return the model identifiers available from the provider."""
         ...
+
+    async def probe_generation(self, request: ImageGenerationRequest) -> None:
+        """Diagnostic single-shot generation: no retry, no save.
+
+        Attempts exactly one generation so callers (e.g. ``doctor --image``)
+        can surface the raw quota/HTTP-429 response. Raises on any failure.
+        """
+        ...

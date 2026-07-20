@@ -8,6 +8,8 @@ logic lives in the infrastructure speech provider layer.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -34,6 +36,16 @@ _console = Console()
 _NARRATION_FILENAME = "narration.mp3"
 
 
+def _ensure_utf8_stdout() -> None:
+    """Switch stdout to UTF-8 so Vietnamese narration text and the Rich progress
+    glyphs render on legacy (cp1252) Windows consoles instead of crashing."""
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is None:
+        return
+    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
+        reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def _synthesize_with_progress(
     provider: SpeechProvider, request: SpeechSynthesisRequest
 ) -> SpeechSynthesisResponse:
@@ -47,13 +59,17 @@ def _synthesize_with_progress(
 
 
 def tts_command(
-    chapter: Annotated[Path, typer.Option("--chapter", help="Path to a chapter JSON file.")],
+    input_path: Annotated[
+        Path,
+        typer.Option("--input", "--chapter", help="Path to a chapter JSON file."),
+    ],
     language: Annotated[str, typer.Option("--language", help="Narration language.")] = "vi",
     force: Annotated[
         bool, typer.Option("--force", help="Regenerate even if the audio already exists.")
     ] = False,
 ) -> None:
     """Synthesize narration audio from a chapter with the configured provider."""
+    _ensure_utf8_stdout()
     settings = load_settings()
     audio_dir = settings.app.output_dir / "audio"
     narration_path = audio_dir / _NARRATION_FILENAME
@@ -65,7 +81,7 @@ def tts_command(
 
     storage = AudioStorage(audio_dir)
     try:
-        story_chapter = read_chapter(chapter)
+        story_chapter = read_chapter(input_path)
         provider = SpeechProviderFactory.create(settings, storage)
         request = SpeechSynthesisRequest(text=story_chapter.content, language=language)
         response = _synthesize_with_progress(provider, request)

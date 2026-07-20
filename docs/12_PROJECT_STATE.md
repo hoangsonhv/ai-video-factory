@@ -21,15 +21,45 @@
 
 ## 2. Current Sprint
 
-**Sprint 012 — Implement Image Generation (image hardening) — DELIVERED** (`001.png` naming + manifest + retry×3 + `--force`/skip on the existing `image`; see also `03_ROADMAP.md`)
+**Sprint 017 — Video Composer — DELIVERED** (ffmpeg-only `compose` CLI → `output/video/final.mp4` + `metadata.json`; ADR-024; see also `03_ROADMAP.md`)
 
-> Enhances the Sprint-008 `image` command (reuses `ImageProvider`); no new architecture. Delivered after Sprint 013 (non-linear numbering follows the Lead's labels). The image counterpart to the Sprint-013 tts hardening.
+> New self-contained `infrastructure/video/` package: pure ffmpeg-command builder, subtitle-timing parser, and `FfmpegVideoComposer` (satisfies the existing `VideoComposer` protocol). 1080x1920 H.264/AAC, Ken Burns + crossfades + burned subtitles; reuses the last image if images < cues; retry-once; verifies ffmpeg via `check_ffmpeg()`. Command generation fully unit-tested (ffmpeg mocked). Live pixel output pending an ffmpeg install by the operator.
 
 ## 3. Completed
 
 - Architecture Document (canonical) — **done**.
 - Full documentation set in `docs/` (`00`–`13`, `CHANGELOG`) — **done**.
-- ADR-001 … ADR-021 recorded — **done**.
+- ADR-001 … ADR-024 recorded — **done**.
+- **Sprint 017 — Video Composer — done:**
+  - New `infrastructure/video/`: pure `build_ffmpeg_command()` (argv generator), `parse_srt_cues()` (timing), `FfmpegVideoComposer` (implements the existing `VideoComposer` protocol — no new port, no factory), `write_video_metadata`.
+  - ffmpeg-only, 1080x1920/30fps/H.264/AAC; one image per subtitle cue (reuse **last** image if fewer images than cues); per-image Ken Burns `zoompan`; `xfade` crossfades; burned subtitles (`subtitles` filter, Windows-escaped); `-shortest` narration audio.
+  - Subprocess runs off the event loop (`asyncio.to_thread`, injectable runner); **retry once** on non-zero exit → `MediaError`; missing binary → `MediaError` (graceful).
+  - CLI `compose --images --audio --subtitle`: verifies ffmpeg with the existing `check_ffmpeg()` diagnostics (clear "install FFmpeg" message if absent), reads-only (never regenerates assets), writes `output/video/final.mp4` + `metadata.json` (duration/fps/resolution/image_count/subtitle_count).
+  - Tests (26 new): command generation, srt timing, composer (retry/missing-ffmpeg/reuse-last/errors) with a **mocked runner**, CLI (success/missing-ffmpeg/missing-inputs), settings. No ffmpeg invoked.
+  - `VideoSettings` added; ffmpeg not installed on this machine → `compose` exits 1 with a friendly message (verified). Operator will install ffmpeg and run the live compose.
+- **Sprint 016 — Subtitle Generation — done:**
+  - New `infrastructure/providers/transcription/` layer: `TranscriptionProvider` protocol + models (`TranscriptionRequest/Segment/Result`), `GeminiTranscriptionProvider` behind a `GeminiTranscriptionClient` seam (lazy SDK; inline audio → JSON timed segments), `TranscriptionProviderFactory` (`gemini_transcription` driver; api-key falls back to the LLM key), `TranscriptionProviderSettings` (retry ×3, default model `gemini-flash-latest`, language `vi`).
+  - Pure `to_srt()` formatter (`transcription/base/srt.py`) + `media/subtitle_storage.py` (UTF-8 `.srt`). Provider returns data; the CLI writes the file.
+  - CLI `subtitle --audio --chapter [--language vi] [--force]`: skip-if-exists, progress spinner, `_ensure_utf8_stdout` (legacy-Windows safe). Reads `chapter.json` (reference text) + narration audio → `output/subtitles/narration.srt`.
+  - Tests (30 new): SRT formatter, subtitle storage, provider (retry/timeout/health/no-key), factory, reply parser, CLI (generate/skip/force/missing-audio/missing-chapter), settings defaults. No real API in tests.
+  - Live: 21-cue Vietnamese `.srt` produced (SubRip, UTF-8) from the Sprint-015 narration. Asset pipeline (`SubtitleGenerator` contract) untouched.
+- **Sprint 015 — Voice Generation — done:**
+  - `tts` command primary flag is now **`--input`** (`--chapter` kept as a backward-compatible alias); reuses `SpeechProvider`, default language `vi`.
+  - Retry ×3 (`SpeechProviderSettings.retry_count`) and skip-unless-`--force` were already present; `narration.mp3` + `metadata.json` (duration/voice/provider/sample_rate) unchanged.
+  - **Fixed a real defect**: on legacy Windows (cp1252) the Rich spinner's Braille glyphs crashed the process *after* saving `narration.mp3` but *before* `metadata.json` — the command now switches stdout to UTF-8 first, so Vietnamese text and progress glyphs render and both files are always written.
+  - Tests: added `test_tts_command_accepts_input_flag`; existing skip/force/metadata tests updated to `--input`. Verified live end-to-end.
+- **Sprint 014 — Generate Real Images — done:**
+  - `image` command reworked to iterate prompts with a 1-based index → `NNN.png`: **per-file skip** (unless `--force`), **continue on failure**, and a **generated / skipped / failed** summary table.
+  - Manifest schema upgraded (`ImageManifestEntry`): `index, filename, prompt, provider, model, width, height, created_at`. Dimensions read from the actual image bytes via a dependency-free PNG/JPEG parser (`media/image_dimensions.py`).
+  - Retry ×3 unchanged (provider's `ImageRateLimiter`). Provider saves into a work dir; each image is atomically renamed to its index-aligned name (provider/storage/public APIs untouched).
+  - Tests: `test_image_dimensions.py` + reworked `test_image_cli.py` (generate/manifest/skip/force/continue-on-failure/retry, mocked provider). Live: 6 existing images skipped, manifest rebuilt with real `576×1024` dimensions.
+  - Fixed a legacy-Windows cp1252 crash (removed a `→` from the summary line).
+- **Sprint 013 — Pollinations Image Provider — done:**
+  - New `providers/image/pollinations/` — `PollinationsImageProvider` (implements the `ImageProvider` protocol) + `PollinationsClient` seam + httpx-backed `RealPollinationsClient` (only module doing HTTP). No API key required.
+  - Registered as the `pollinations` driver in `ImageProviderFactory`; **default image provider flipped to `pollinations`** (model `flux`) in settings + `.env.example`. Gemini Imagen unchanged and available via `provider=gemini_imagen`.
+  - Reuses the existing `image` command unchanged: reads `output/image_prompts.json`, saves `001.png`…, manifest, retry ×3 (shared `ImageRateLimiter`), skip-existing-unless-`--force`. Aspect ratio → width/height (longer side 1024).
+  - Tests: `test_pollinations_provider.py` (fake client) + `test_pollinations_client.py` (httpx `MockTransport`, no network) + factory/settings updates. No public API changed; no other provider modified.
+  - Live: 6 images generated for free (`provider=pollinations`, `model=flux`).
 - **Sprint 012 — Implement Image Generation (image hardening) — done:**
   - Enhanced the existing `image` command (Sprint 008) — reuses `ImageProvider`, no refactor:
     - **Filenames**: images now saved as `001.png`, `002.png`, … (`ImageStorage` gained backward-compatible empty-prefix support; default prefix unchanged, so the asset pipeline still uses `image_001.png`).

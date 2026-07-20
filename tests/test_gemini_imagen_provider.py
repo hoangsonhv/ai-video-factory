@@ -103,6 +103,30 @@ def test_generate_retries_transient_error(tmp_path: Path, monkeypatch: pytest.Mo
     assert client.calls == 2
 
 
+def test_probe_generation_single_call_and_does_not_save(tmp_path: Path) -> None:
+    storage = ImageStorage(tmp_path / "images")
+    client = FakeImagenClient(data=b"X")
+    provider = GeminiImagenProvider(_settings(), storage, client=client)
+
+    asyncio.run(provider.probe_generation(_request()))
+
+    assert client.calls == 1  # one shot, no retry
+    assert not (tmp_path / "images").exists()  # nothing written to disk
+
+
+def test_probe_generation_raises_without_key(tmp_path: Path) -> None:
+    provider = GeminiImagenProvider(_settings(), ImageStorage(tmp_path))
+    with pytest.raises(AuthenticationError):
+        asyncio.run(provider.probe_generation(_request()))
+
+
+def test_probe_generation_propagates_rate_limit(tmp_path: Path) -> None:
+    client = FakeImagenClient(error=RateLimitError("429"))
+    provider = GeminiImagenProvider(_settings(), ImageStorage(tmp_path), client=client)
+    with pytest.raises(RateLimitError):
+        asyncio.run(provider.probe_generation(_request()))
+
+
 def test_health_check_warn_without_key(tmp_path: Path) -> None:
     provider = GeminiImagenProvider(_settings(), ImageStorage(tmp_path))
     assert asyncio.run(provider.health_check()).status is HealthStatus.WARN

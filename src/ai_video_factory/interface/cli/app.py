@@ -8,6 +8,7 @@ only wires those pieces to the terminal (docs/ai-tool.md §2.4).
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -15,16 +16,18 @@ from rich.console import Console
 from ai_video_factory import __version__
 from ai_video_factory.errors import ConfigurationError
 from ai_video_factory.infrastructure.config.settings import LoggingSettings, load_settings
-from ai_video_factory.infrastructure.diagnostics import run_all_checks
+from ai_video_factory.infrastructure.diagnostics import run_all_checks, run_image_checks
 from ai_video_factory.infrastructure.logging.setup import configure_logging
 from ai_video_factory.interface.cli.assets_commands import assets_command
 from ai_video_factory.interface.cli.chapter_commands import chapter_command
+from ai_video_factory.interface.cli.compose_commands import compose_command
 from ai_video_factory.interface.cli.generate_commands import generate_command
 from ai_video_factory.interface.cli.idea_commands import idea_command
-from ai_video_factory.interface.cli.image_commands import image_command
+from ai_video_factory.interface.cli.image_commands import image_command, image_models_command
 from ai_video_factory.interface.cli.image_prompt_commands import image_prompt_command
 from ai_video_factory.interface.cli.outline_commands import outline_command
 from ai_video_factory.interface.cli.prompt_commands import prompt_app
+from ai_video_factory.interface.cli.subtitle_commands import subtitle_command
 from ai_video_factory.interface.cli.tts_commands import tts_command
 from ai_video_factory.interface.presenters.diagnostics_presenter import render_diagnostics
 
@@ -36,7 +39,10 @@ app.command("outline")(outline_command)
 app.command("chapter")(chapter_command)
 app.command("image-prompt")(image_prompt_command)
 app.command("image")(image_command)
+app.command("image-models")(image_models_command)
 app.command("tts")(tts_command)
+app.command("subtitle")(subtitle_command)
+app.command("compose")(compose_command)
 app.command("assets")(assets_command)
 _console = Console()
 _logger = logging.getLogger(__name__)
@@ -64,15 +70,22 @@ def version() -> None:
 
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    image: Annotated[
+        bool,
+        typer.Option("--image", help="Run image-provider diagnostics instead of the general ones."),
+    ] = False,
+) -> None:
     """Check that the runtime environment is ready.
 
     Verifies the Python version, ffmpeg availability, a writable output
-    folder, configuration loading and SQLite connectivity. Exits with a
+    folder, configuration loading and SQLite connectivity. With ``--image``,
+    runs image-provider diagnostics instead (model, provider, region, auth,
+    API reachability, model existence and a live quota probe). Exits with a
     non-zero status if any check fails.
     """
-    _logger.debug("Running doctor diagnostics")
-    results = run_all_checks()
+    _logger.debug("Running doctor diagnostics (image=%s)", image)
+    results = run_image_checks() if image else run_all_checks()
     render_diagnostics(results, console=_console)
     if any(result.is_failure for result in results):
         raise typer.Exit(code=1)

@@ -68,8 +68,27 @@ def test_tts_command_synthesizes_and_saves(monkeypatch: pytest.MonkeyPatch, tmp_
     }
 
 
+def test_tts_command_accepts_input_flag(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # Sprint 015: the primary flag is ``--input`` (``--chapter`` stays as an alias).
+    monkeypatch.setattr(
+        tts.SpeechProviderFactory, "create", lambda settings, storage: _FakeSpeechProvider(storage)
+    )
+    chapter_path = tmp_path / "chapter.json"
+    chapter_path.write_text(
+        json.dumps({"title": "T", "content": "Xin chào", "estimated_duration_seconds": 5}),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["tts", "--input", str(chapter_path)])
+
+    assert result.exit_code == 0
+    audio_dir = tmp_path / "out" / "audio"
+    assert (audio_dir / "narration.mp3").exists()
+    assert (audio_dir / "metadata.json").exists()
+
+
 def test_tts_command_missing_chapter_fails(tmp_path: Path) -> None:
-    result = runner.invoke(app, ["tts", "--chapter", str(tmp_path / "nope.json")])
+    result = runner.invoke(app, ["tts", "--input", str(tmp_path / "nope.json")])
     assert result.exit_code == 1
 
 
