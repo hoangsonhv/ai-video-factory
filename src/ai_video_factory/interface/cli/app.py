@@ -21,7 +21,6 @@ from ai_video_factory.infrastructure.logging.setup import configure_logging
 from ai_video_factory.interface.cli.assets_commands import assets_command
 from ai_video_factory.interface.cli.chapter_commands import chapter_command
 from ai_video_factory.interface.cli.character_commands import character_app
-from ai_video_factory.interface.cli.cinema_commands import cinema_command
 from ai_video_factory.interface.cli.compose_commands import compose_command
 from ai_video_factory.interface.cli.continuity_commands import continuity_command
 from ai_video_factory.interface.cli.director_commands import director_command
@@ -52,7 +51,6 @@ app.command("movie")(movie_command)
 app.command("director")(director_command)
 app.command("storyboard")(storyboard_command)
 app.command("continuity")(continuity_command)
-app.command("cinema")(cinema_command)
 app.command("shot-plan")(shot_plan_command)
 app.command("image")(image_command)
 app.command("image-models")(image_models_command)
