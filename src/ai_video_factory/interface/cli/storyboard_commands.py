@@ -8,8 +8,6 @@ builder. Deterministic and offline — no provider is contacted.
 
 from __future__ import annotations
 
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -31,6 +29,7 @@ from ai_video_factory.infrastructure.storyboard.reader import (
     write_storyboard_json,
 )
 from ai_video_factory.interface.presenters.storyboard_presenter import render_storyboard
+from ai_video_factory.shared.console import ensure_utf8_stdout
 
 _console = Console()
 
@@ -39,16 +38,6 @@ LIBRARY_FILENAME = "character_library.json"
 NARRATION_SUBTITLES = Path("subtitles") / "narration.srt"
 NARRATION_AUDIO = Path("audio") / "narration.mp3"
 NARRATION_METADATA = Path("audio") / "metadata.json"
-
-
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese text renders on legacy (cp1252)
-    Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 MISTIMING_TOLERANCE = 0.1
@@ -91,7 +80,7 @@ def storyboard_command(
     ] = None,
 ) -> None:
     """Turn a directed movie into a shot-by-shot storyboard."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     output_dir = settings.app.output_dir
     subtitle_path = subtitles or output_dir / NARRATION_SUBTITLES

@@ -8,8 +8,6 @@ logic lives in the infrastructure speech provider layer.
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -31,19 +29,10 @@ from ai_video_factory.infrastructure.providers.speech.factory.speech_provider_fa
 )
 from ai_video_factory.infrastructure.story.reader import read_chapter
 from ai_video_factory.interface.presenters.tts_presenter import render_tts_summary
+from ai_video_factory.shared.console import ensure_utf8_stdout
 
 _console = Console()
 _NARRATION_FILENAME = "narration.mp3"
-
-
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese narration text and the Rich progress
-    glyphs render on legacy (cp1252) Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def _synthesize_with_progress(
@@ -69,7 +58,7 @@ def tts_command(
     ] = False,
 ) -> None:
     """Synthesize narration audio from a chapter with the configured provider."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     audio_dir = settings.app.output_dir / "audio"
     narration_path = audio_dir / _NARRATION_FILENAME

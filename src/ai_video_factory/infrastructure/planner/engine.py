@@ -137,11 +137,18 @@ class ShotPlanningEngine:
         filmed — and letting the storyboard choose the framing is what produced
         a film of portraits.
         """
+        visibility = planned.environment_visibility
         return PromptSource(
             character_id=shot.character if shot else "",
+            emotion=planned.emotion,
             action=shot.action if shot else planned.focus_subject,
-            environment=planned.environment_visibility.summary,
+            # The three depths go in as three fields, never as the summary
+            # plus its own parts — that wrote each of them into the prompt twice.
+            environment=visibility.background,
+            weather=visibility.foreground,
+            objects=visibility.midground,
             camera=planned.camera,
+            camera_movement=planned.camera_motion,
             lighting=planned.lighting_style.value,
             composition=planned.composition.value,
             allows_close_framing=planned.is_close,

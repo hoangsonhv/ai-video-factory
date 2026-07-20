@@ -100,14 +100,18 @@ def build_world_bible(movie: Movie) -> WorldBible:
         )
         for location in movie.locations
     )
-    setting = _join([location.description for location in movie.locations])
+    # Palette and lighting are film-wide looks. Concatenating every location's
+    # description into them put five locations into every single prompt — the
+    # one place the shot is actually in, plus four it is not. Nothing upstream
+    # records a palette, so it is left empty and hand-editable (ADR-037) rather
+    # than filled with something that is not a palette.
     return WorldBible(
         title=movie.title,
         genre=_clean(movie.genre),
         style=_clean(movie.style),
         era="",
-        palette=setting,
-        lighting=setting,
+        palette="",
+        lighting="",
         weather="",
         art_direction=_join([movie.style, movie.genre]),
         cinematic_style=_join([movie.style, "cinematic film still", "consistent colour grade"]),

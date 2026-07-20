@@ -8,8 +8,6 @@ Builder. This adds a new stage and does not alter the existing pipeline.
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -26,18 +24,9 @@ from ai_video_factory.infrastructure.story.movie_builder import (
 from ai_video_factory.infrastructure.story.movie_writer import write_movie_json
 from ai_video_factory.infrastructure.story.reader import read_chapter
 from ai_video_factory.interface.presenters.movie_presenter import render_movie_summary
+from ai_video_factory.shared.console import ensure_utf8_stdout
 
 _console = Console()
-
-
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese text renders on legacy (cp1252)
-    Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def movie_command(
@@ -47,7 +36,7 @@ def movie_command(
     language: Annotated[str, typer.Option("--language", help="Dialogue language.")] = "vi",
 ) -> None:
     """Build a structured movie bible (characters + scenes) from a chapter."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     try:
         chapter = read_chapter(input_path)

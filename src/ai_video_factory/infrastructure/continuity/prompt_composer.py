@@ -117,9 +117,21 @@ class PromptSource(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     character_id: str = ""
+    emotion: str = ""
+    """What the character is feeling — the fourth part of Character."""
+
     action: str = ""
+
     environment: str = ""
+    time_of_day: str = ""
+    weather: str = ""
+    objects: str = ""
+    """Location, time, weather and objects — the four parts of Environment."""
+
     camera: str = ""
+    camera_movement: str = ""
+    """Shot type / lens / angle, then the move — the four parts of Camera."""
+
     lighting: str = ""
     composition: str = ""
     allows_close_framing: bool = False
@@ -224,11 +236,25 @@ class _Deduplicator:
 
 
 def _character(source: PromptSource, bible: CharacterBible, dedupe: _Deduplicator) -> str:
-    """Who is in frame — from the character bible, and nowhere else."""
+    """Identity, appearance, clothing and emotion — the bible, plus this beat.
+
+    The first three come from ``character_bible.json`` and nowhere else, so a
+    character cannot be described differently in two frames. Only the emotion
+    is per-shot: it is the one thing about a person that is *supposed* to
+    change between frames.
+    """
     entry = bible.get(source.character_id) if source.character_id else None
     if entry is None:
-        return dedupe.take([_clean(source.character_id.replace("_", " "))])
-    return dedupe.take([entry.name, entry.identity])
+        return dedupe.take([_clean(source.character_id.replace("_", " ")), _clean(source.emotion)])
+    return dedupe.take(
+        [
+            entry.name,  # identity
+            entry.appearance,  # appearance
+            entry.wardrobe,  # clothing
+            entry.signature_props,
+            _clean(source.emotion),  # emotion
+        ]
+    )
 
 
 def _environment(source: PromptSource, world: WorldBible, dedupe: _Deduplicator) -> str:
@@ -237,7 +263,15 @@ def _environment(source: PromptSource, world: WorldBible, dedupe: _Deduplicator)
     # field holds every location's description, which would drown the one
     # location the shot is actually in.
     return dedupe.take(
-        [source.environment, world.title, world.era, world.art_direction, world.cinematic_style]
+        [
+            source.environment,  # location, as this frame sees it
+            source.time_of_day or world.era,  # time
+            source.weather or world.weather,  # weather
+            source.objects,  # objects in the frame
+            world.title,
+            world.art_direction,
+            world.cinematic_style,
+        ]
     )
 
 
@@ -282,6 +316,26 @@ def _render(sections: Sequence[tuple[str, str]]) -> str:
     return SEPARATOR.join(f"{label}: {value}" for label, value in sections if value)
 
 
+SCENE_FALLBACK = "the surrounding location visible around the subject, full scene in frame"
+
+
+def _guarantee_a_scene(sections: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Refuse to emit a prompt that describes a person and nothing else.
+
+    A prompt carrying a character but no environment and no camera is the
+    definition of the portrait this pipeline exists to stop producing. When
+    upstream supplied nothing to place the subject in, the prompt says so
+    explicitly rather than falling silent and letting the model default to a
+    face on a backdrop.
+    """
+    filled = dict(sections)
+    if filled.get("Environment") or filled.get("Camera"):
+        return sections
+    return [
+        (label, SCENE_FALLBACK if label == "Environment" else value) for label, value in sections
+    ]
+
+
 def build_prompt(
     source: PromptSource,
     bible: CharacterBible,
@@ -316,7 +370,15 @@ def build_prompt(
         ("Character", character),
         ("Action", strip_framing(primary_action(source.action), allowed=close)),
         ("Environment", strip_framing(environment, allowed=close)),
-        ("Camera", strip_framing(_clean(source.camera), allowed=close)),
+        (
+            "Camera",
+            strip_framing(
+                ", ".join(
+                    part for part in (_clean(source.camera), _clean(source.camera_movement)) if part
+                ),
+                allowed=close,
+            ),
+        ),
         ("Lighting", _clean(source.lighting)),
         ("Composition", _clean(source.composition)),
         ("Style", style),
@@ -332,4 +394,4 @@ def build_prompt(
             for label, value in sections
         ]
 
-    return _render(_fit(sections, max_words))
+    return _render(_fit(_guarantee_a_scene(sections), max_words))

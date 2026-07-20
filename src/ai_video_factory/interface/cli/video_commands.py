@@ -12,8 +12,6 @@ untouched and keeps working unchanged.
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -63,6 +61,7 @@ from ai_video_factory.interface.presenters.video_provider_presenter import (
     render_provider_health,
     render_provider_list,
 )
+from ai_video_factory.shared.console import ensure_utf8_stdout
 from ai_video_factory.shared.health import HealthStatus
 
 video_app = typer.Typer(
@@ -74,16 +73,6 @@ _console = Console()
 CLIPS_DIRNAME = "video_clips"
 IMAGES_DIRNAME = "images"
 LIBRARY_FILENAME = "character_library.json"
-
-
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese text and Rich progress glyphs render
-    on legacy (cp1252) Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def _clips_dir(settings: Settings) -> Path:
@@ -98,7 +87,7 @@ def _provider_statuses(settings: Settings) -> list[VideoProviderStatus]:
 @video_app.command("providers")
 def video_providers_command() -> None:
     """List the registered video providers and the configured default."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     try:
         statuses = _provider_statuses(settings)
@@ -124,7 +113,7 @@ def video_doctor_command() -> None:
     alternative driver (e.g. Kling with no API key while ``mock`` is selected)
     is reported for information without failing the command.
     """
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     try:
         statuses = _provider_statuses(settings)
@@ -362,7 +351,7 @@ def video_generate_command(
     carrying the character, scene and previous-clip references a provider may
     condition on to hold consistency.
     """
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     clips_dir = _clips_dir(settings)
     images_dir = images if images is not None else settings.app.output_dir / IMAGES_DIRNAME

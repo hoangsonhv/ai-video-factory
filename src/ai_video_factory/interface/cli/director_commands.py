@@ -14,8 +14,6 @@ is left unplanned and the run continues; ``--resume`` re-asks only for those.
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -36,22 +34,13 @@ from ai_video_factory.interface.presenters.director_presenter import (
     render_direction_report,
     render_shot_list,
 )
+from ai_video_factory.shared.console import ensure_utf8_stdout
 
 _console = Console()
 
 DIRECTED_FILENAME = "movie_directed.json"
 PARTIAL_FILENAME = "movie_directed.partial.json"
 LIBRARY_FILENAME = "character_library.json"
-
-
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese text and Rich progress glyphs render
-    on legacy (cp1252) Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 class _PlanProgress:
@@ -90,7 +79,7 @@ def director_command(
     ] = False,
 ) -> None:
     """Plan every shot of a movie and write the directed movie."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     output_dir = settings.app.output_dir
     library_source = library_path or output_dir / LIBRARY_FILENAME
