@@ -18,6 +18,9 @@ from ai_video_factory.infrastructure.providers.base.errors import (
     ProviderUnavailableError,
     RateLimitError,
 )
+from ai_video_factory.infrastructure.providers.base.errors import (
+    TimeoutError as ProviderTimeoutError,
+)
 from ai_video_factory.infrastructure.providers.base.models import LLMRequest, RawCompletion
 
 # The server communicates a back-off hint either as ``'retryDelay': '21s'`` or
@@ -72,6 +75,31 @@ def map_status_to_error(status: int, message: str) -> AIProviderError:
     return InvalidResponseError(message, context={"status": status})
 
 
+def map_transport_error(exc: Exception) -> AIProviderError:
+    """Translate a transport-level failure into a retryable provider error.
+
+    The SDK raises ``APIError`` only once it has an HTTP response. A connection
+    timeout, read timeout or dropped socket surfaces as an ``httpx`` (or
+    builtin) exception instead, which would otherwise escape untranslated and
+    unretried — the transient failure that most often kills a long run.
+    """
+    name = type(exc).__name__
+    if isinstance(exc, TimeoutError) or "Timeout" in name:
+        return ProviderTimeoutError(f"Gemini transport timeout ({name}): {exc}")
+    return ProviderUnavailableError(f"Gemini transport failure ({name}): {exc}")
+
+
+def transport_error_types() -> tuple[type[Exception], ...]:
+    """The transport exceptions worth translating, httpx included when present."""
+    types: list[type[Exception]] = [TimeoutError, ConnectionError]
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover - httpx is a hard dependency
+        return tuple(types)
+    types.extend((httpx.TimeoutException, httpx.TransportError))
+    return tuple(types)
+
+
 class RealGeminiClient:
     """Concrete :class:`GeminiClient` backed by the ``google-genai`` SDK."""
 
@@ -83,6 +111,7 @@ class RealGeminiClient:
         self._client = genai.Client(api_key=api_key)
         self._types = genai_types
         self._api_error: type[Exception] = genai_errors.APIError
+        self._transport_errors = transport_error_types()
 
     async def complete(self, request: LLMRequest, *, model: str) -> RawCompletion:
         config = self._types.GenerateContentConfig(
@@ -98,6 +127,8 @@ class RealGeminiClient:
             )
         except self._api_error as exc:
             raise map_status_to_error(int(getattr(exc, "code", 0) or 0), str(exc)) from exc
+        except self._transport_errors as exc:
+            raise map_transport_error(exc) from exc
 
         usage = getattr(response, "usage_metadata", None)
         return RawCompletion(
@@ -114,6 +145,8 @@ class RealGeminiClient:
             result = await self._client.aio.models.count_tokens(model=model, contents=text)
         except self._api_error as exc:
             raise map_status_to_error(int(getattr(exc, "code", 0) or 0), str(exc)) from exc
+        except self._transport_errors as exc:
+            raise map_transport_error(exc) from exc
         return int(getattr(result, "total_tokens", 0) or 0)
 
     async def list_models(self) -> list[str]:
@@ -126,6 +159,8 @@ class RealGeminiClient:
                     names.append(str(name))
         except self._api_error as exc:
             raise map_status_to_error(int(getattr(exc, "code", 0) or 0), str(exc)) from exc
+        except self._transport_errors as exc:
+            raise map_transport_error(exc) from exc
         return names
 
     @staticmethod

@@ -19,3 +19,7 @@ class ChapterParseError(InfrastructureError):
 
 class ImagePromptParseError(InfrastructureError):
     """The AI provider returned output that could not be parsed into image prompts."""
+
+
+class MovieBuildError(InfrastructureError):
+    """The AI provider returned output that could not be parsed into a movie."""

@@ -20,24 +20,40 @@ from ai_video_factory.infrastructure.diagnostics import run_all_checks, run_imag
 from ai_video_factory.infrastructure.logging.setup import configure_logging
 from ai_video_factory.interface.cli.assets_commands import assets_command
 from ai_video_factory.interface.cli.chapter_commands import chapter_command
+from ai_video_factory.interface.cli.character_commands import character_app
+from ai_video_factory.interface.cli.cinema_commands import cinema_command
 from ai_video_factory.interface.cli.compose_commands import compose_command
+from ai_video_factory.interface.cli.continuity_commands import continuity_command
+from ai_video_factory.interface.cli.director_commands import director_command
 from ai_video_factory.interface.cli.generate_commands import generate_command
 from ai_video_factory.interface.cli.idea_commands import idea_command
 from ai_video_factory.interface.cli.image_commands import image_command, image_models_command
 from ai_video_factory.interface.cli.image_prompt_commands import image_prompt_command
+from ai_video_factory.interface.cli.movie_commands import movie_command
 from ai_video_factory.interface.cli.outline_commands import outline_command
+from ai_video_factory.interface.cli.planner_commands import shot_plan_command
 from ai_video_factory.interface.cli.prompt_commands import prompt_app
+from ai_video_factory.interface.cli.storyboard_commands import storyboard_command
 from ai_video_factory.interface.cli.subtitle_commands import subtitle_command
 from ai_video_factory.interface.cli.tts_commands import tts_command
+from ai_video_factory.interface.cli.video_commands import video_app
 from ai_video_factory.interface.presenters.diagnostics_presenter import render_diagnostics
 
 app = typer.Typer(add_completion=False, help="AI Video Factory command-line interface.")
 app.add_typer(prompt_app, name="prompt")
+app.add_typer(character_app, name="character")
+app.add_typer(video_app, name="video")
 app.command("generate")(generate_command)
 app.command("idea")(idea_command)
 app.command("outline")(outline_command)
 app.command("chapter")(chapter_command)
 app.command("image-prompt")(image_prompt_command)
+app.command("movie")(movie_command)
+app.command("director")(director_command)
+app.command("storyboard")(storyboard_command)
+app.command("continuity")(continuity_command)
+app.command("cinema")(cinema_command)
+app.command("shot-plan")(shot_plan_command)
 app.command("image")(image_command)
 app.command("image-models")(image_models_command)
 app.command("tts")(tts_command)
