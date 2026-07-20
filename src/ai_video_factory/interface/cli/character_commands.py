@@ -7,8 +7,6 @@ neither the Movie Builder nor the image provider.
 
 from __future__ import annotations
 
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -29,6 +27,7 @@ from ai_video_factory.interface.presenters.character_presenter import (
     render_character_library,
     render_injection_summary,
 )
+from ai_video_factory.shared.console import ensure_utf8_stdout
 
 character_app = typer.Typer(
     no_args_is_help=True,
@@ -40,16 +39,6 @@ LIBRARY_FILENAME = "character_library.json"
 CONSISTENT_MOVIE_FILENAME = "movie_consistent.json"
 
 
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese text renders on legacy (cp1252)
-    Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
-
-
 @character_app.command("build")
 def character_build_command(
     input_path: Annotated[Path, typer.Option("--input", help="Path to a movie JSON file.")] = Path(
@@ -57,7 +46,7 @@ def character_build_command(
     ),
 ) -> None:
     """Build the character consistency library from a movie bible."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     try:
         movie = read_movie(input_path)
@@ -88,7 +77,7 @@ def character_inject_command(
     ] = None,
 ) -> None:
     """Bind every scene prompt to the character library."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     library_source = library_path or settings.app.output_dir / LIBRARY_FILENAME
     try:

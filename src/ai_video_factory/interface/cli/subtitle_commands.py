@@ -8,8 +8,6 @@ transcription logic lives in the infrastructure transcription provider layer.
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -33,19 +31,10 @@ from ai_video_factory.infrastructure.providers.transcription.factory.transcripti
 )
 from ai_video_factory.infrastructure.story.reader import read_chapter
 from ai_video_factory.interface.presenters.subtitle_presenter import render_subtitle_summary
+from ai_video_factory.shared.console import ensure_utf8_stdout
 
 _console = Console()
 _SUBTITLE_FILENAME = "narration.srt"
-
-
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese text and Rich progress glyphs render
-    on legacy (cp1252) Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def _transcribe_with_progress(
@@ -69,7 +58,7 @@ def subtitle_command(
     ] = False,
 ) -> None:
     """Generate a synchronized ``.srt`` subtitle from narration audio and a chapter."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     subtitles_dir = settings.app.output_dir / "subtitles"
     srt_path = subtitles_dir / _SUBTITLE_FILENAME

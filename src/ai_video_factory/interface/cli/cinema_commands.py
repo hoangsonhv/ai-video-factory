@@ -10,8 +10,6 @@ stage is touched.
 
 from __future__ import annotations
 
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -32,6 +30,7 @@ from ai_video_factory.interface.presenters.cinema_presenter import (
     render_coverage,
     render_shot_list,
 )
+from ai_video_factory.shared.console import ensure_utf8_stdout
 
 _console = Console()
 
@@ -39,16 +38,6 @@ DIRECTION_FILE = "cinematic_direction.json"
 PROMPTS_FILE = "shot_image_prompts.json"
 CHARACTER_BIBLE = "character_bible.json"
 WORLD_BIBLE = "world_bible.json"
-
-
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese text renders on legacy (cp1252)
-    Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def cinema_command(
@@ -65,7 +54,7 @@ def cinema_command(
     Rebuilds every image prompt from the director's decisions, so the camera
     and lens come from a choice rather than a default.
     """
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
     output_dir = settings.app.output_dir
     prompts_target = prompts_path or output_dir / PROMPTS_FILE

@@ -125,9 +125,12 @@ class VisualContinuityEngine:
         current = shot_context.current_shot
         return PromptSource(
             character_id=shot_context.character_state,
+            emotion=shot_context.emotion or current.expression,
             action=current.action,
             environment=shot_context.environment_continuity or current.environment,
-            camera=current.camera,
+            weather=shot_context.weather_continuity,
+            objects=shot_context.prop_continuity,
+            camera=shot_context.camera_continuity or current.camera,
             lighting=shot_context.lighting_continuity or current.lighting,
             composition="",
             allows_close_framing="close" in current.camera.lower(),

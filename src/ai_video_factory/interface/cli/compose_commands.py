@@ -9,8 +9,6 @@ it never regenerates images, audio, or subtitles.
 from __future__ import annotations
 
 import asyncio
-import contextlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -25,19 +23,10 @@ from ai_video_factory.infrastructure.diagnostics import check_ffmpeg
 from ai_video_factory.infrastructure.video.ffmpeg_composer import FfmpegVideoComposer
 from ai_video_factory.infrastructure.video.writer import write_video_metadata
 from ai_video_factory.interface.presenters.video_presenter import render_video_summary
+from ai_video_factory.shared.console import ensure_utf8_stdout
 
 _console = Console()
 _VIDEO_FILENAME = "final.mp4"
-
-
-def _ensure_utf8_stdout() -> None:
-    """Switch stdout to UTF-8 so Vietnamese paths and Rich progress glyphs render
-    on legacy (cp1252) Windows consoles instead of crashing."""
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    with contextlib.suppress(ValueError, OSError):  # stream may not be reconfigurable
-        reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def _compose_with_progress(
@@ -58,7 +47,7 @@ def compose_command(
     subtitle: Annotated[Path, typer.Option("--subtitle", help="Path to the subtitle .srt file.")],
 ) -> None:
     """Compose the final TikTok MP4 from existing images, audio, and subtitles."""
-    _ensure_utf8_stdout()
+    ensure_utf8_stdout()
     settings = load_settings()
 
     ffmpeg_status = check_ffmpeg()

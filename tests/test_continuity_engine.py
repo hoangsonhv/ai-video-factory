@@ -116,8 +116,17 @@ def test_the_world_bible_reads_the_locations() -> None:
 
     assert world.title == "Tu Tiên"
     assert world.style == "cinematic"
-    assert "sunrise over a stormy sea" in world.palette
     assert world.locations[0].id == "cliff"
+    assert world.locations[0].description == "sunrise over a stormy sea"
+
+
+def test_a_location_description_is_not_mistaken_for_a_palette() -> None:
+    """Concatenating every location into `palette` put five places, four of
+    them wrong, into every prompt the bible fed."""
+    world = build_world_bible(_movie())
+
+    assert world.palette == ""
+    assert world.lighting == ""
 
 
 def test_the_world_bible_invents_nothing_it_was_not_given() -> None:

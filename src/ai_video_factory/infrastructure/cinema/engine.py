@@ -97,9 +97,13 @@ class CinematicDirector:
         current = context.current_shot
         return PromptSource(
             character_id=context.character_state,
+            emotion=shot.emotion if shot else context.emotion,
             action=shot.action if shot else current.action,
             environment=context.environment_continuity or current.environment,
+            weather=context.weather_continuity,
+            objects=shot.blocking.object_position if shot else context.prop_continuity,
             camera=shot.camera if shot else current.camera,
+            camera_movement=shot.motion_hint if shot else "",
             lighting=shot.lighting.value if shot else context.lighting_continuity,
             composition=shot.composition.value if shot else "",
             allows_close_framing=shot is not None

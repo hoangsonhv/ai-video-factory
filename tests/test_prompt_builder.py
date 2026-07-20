@@ -342,3 +342,79 @@ def test_a_shared_word_does_not_empty_the_style_section() -> None:
 
     assert _section(prompt, "Style")
     assert _section(prompt, "Environment")
+
+
+# --- the four parts of each compound section ------------------------------
+
+
+def test_character_carries_identity_appearance_clothing_and_emotion() -> None:
+    prompt = build_prompt(_source(emotion="grim resolve"), _bible(), _world())
+
+    character = _section(prompt, "Character")
+    assert "Lam Thien" in character  # identity
+    assert "long black hair" in character  # appearance
+    assert "white robe" in character  # clothing
+    assert "grim resolve" in character  # emotion
+
+
+def test_emotion_is_the_only_per_shot_part_of_character() -> None:
+    """A look that changes per shot is drift; a feeling that does is acting."""
+    calm = build_prompt(_source(emotion="calm"), _bible(), _world())
+    afraid = build_prompt(_source(emotion="afraid"), _bible(), _world())
+
+    assert _section(calm, "Character") != _section(afraid, "Character")
+    assert "long black hair" in _section(afraid, "Character")
+
+
+def test_environment_carries_location_time_weather_and_objects() -> None:
+    prompt = build_prompt(
+        _source(
+            environment="a rooftop above the district",
+            time_of_day="just before dawn",
+            weather="thin rain",
+            objects="a toppled antenna mast",
+        ),
+        _bible(),
+        _world(),
+    )
+
+    environment = _section(prompt, "Environment")
+    assert "rooftop" in environment
+    assert "just before dawn" in environment
+    assert "thin rain" in environment
+    assert "toppled antenna mast" in environment
+
+
+def test_camera_carries_framing_and_movement() -> None:
+    prompt = build_prompt(
+        _source(camera="wide shot, far, low angle, 24mm", camera_movement="slow push in"),
+        _bible(),
+        _world(),
+    )
+
+    camera = _section(prompt, "Camera")
+    assert "wide shot" in camera
+    assert "24mm" in camera
+    assert "low angle" in camera
+    assert "slow push in" in camera
+
+
+# --- never character-only --------------------------------------------------
+
+
+def test_a_character_with_nowhere_to_stand_still_gets_a_scene() -> None:
+    """A prompt with a person and no world is the portrait we exist to prevent."""
+    prompt = build_prompt(
+        _source(environment="", camera="", objects="", weather="", time_of_day=""),
+        _bible(),
+        WorldBible(),
+    )
+
+    assert _section(prompt, "Environment")
+    assert "full scene in frame" in prompt
+
+
+def test_a_prompt_that_has_a_camera_is_left_alone() -> None:
+    prompt = build_prompt(_source(environment=""), _bible(), WorldBible())
+
+    assert "full scene in frame" not in prompt
